@@ -387,6 +387,9 @@ The test suite has three layers:
 python3 fuzz/difftest.py --cases 100000 --seed 1
 ```
 
+  Python h11 is patched in the harness with the same `chunk_start` fix, so
+  the comparison is exact; `--unpatched` compares against upstream as is.
+
 Every code block in this README also runs as a test.
 
 ## License and credits

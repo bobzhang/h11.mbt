@@ -259,6 +259,12 @@ fn run_case(
       Paused => {
         out.push("PAUSED")
         if !respond() {
+          // Deliver what's left (e.g. tunnelled bytes after a protocol
+          // switch) so trailing_data gets compared too.
+          while i < chunks.length() {
+            try! conn.receive_data(chunks[i])
+            i += 1
+          }
           break
         }
         continue

@@ -7,7 +7,7 @@ h11 (from ../.repos/h11) and the MoonBit port (fuzz/difftest), and reports
 any case where the traces differ.
 
 Usage:
-    python3 fuzz/difftest.py [--cases N] [--seed S] [--strict-chunk-start]
+    python3 fuzz/difftest.py [--cases N] [--seed S] [--unpatched]
 
 Requires `moon` and a clone of python-hyper/h11 in .repos/h11.
 """
@@ -24,6 +24,34 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, ".repos", "h11"))
 
 import h11  # noqa: E402
+import h11._readers  # noqa: E402
+
+
+def patch_chunk_start_fix():
+    """Give Python h11 the same chunk_start fix as the MoonBit port, so the
+    two can be compared exactly.
+
+    Upstream h11 reports chunk_start=False for data whose chunk header was
+    consumed by an earlier call that then returned None (NEED_DATA).
+    """
+    reader = h11._readers.ChunkedReader
+    original = reader.__call__
+
+    def patched(self, buf):
+        before = self._bytes_in_chunk
+        event = original(self, buf)
+        if event is None:
+            if before == 0 and self._bytes_in_chunk > 0:
+                # a chunk header was consumed, but none of its data yet
+                self._pending_chunk_start = True
+            return event
+        if type(event) is h11.Data:
+            if getattr(self, "_pending_chunk_start", False) and not event.chunk_start:
+                event = h11.Data(data=event.data, chunk_start=True, chunk_end=event.chunk_end)
+            self._pending_chunk_start = False
+        return event
+
+    reader.__call__ = patched
 
 TCHARS = b"!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 VCHARS = bytes(range(0x21, 0x7F))
@@ -182,6 +210,11 @@ def run_case(role, variant, chunks):
         if ev is h11.PAUSED:
             out.append("PAUSED")
             if not respond():
+                # Deliver what's left (e.g. tunnelled bytes after a protocol
+                # switch) so trailing_data gets compared too.
+                while i < len(chunks):
+                    conn.receive_data(chunks[i])
+                    i += 1
                 break
             continue
         out.append(fmt_event(ev))
@@ -357,31 +390,17 @@ def build_moonbit():
     return exe
 
 
-def same_line(py, mbt, allow_chunk_start_fix):
-    if py == mbt:
-        return True
-    # The one deliberate divergence: Python reports chunk_start=False for data
-    # whose chunk header arrived in an earlier read; we report True.
-    return (
-        allow_chunk_start_fix
-        and py.startswith("DATA ")
-        and mbt.startswith("DATA ")
-        and py[:-2] == mbt[:-2]
-        and py[-1] == mbt[-1]
-        and py[-2] == "0"
-        and mbt[-2] == "1"
-    )
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", type=int, default=20000)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--strict-chunk-start", action="store_true",
-                    help="also compare Data.chunk_start (MoonBit deliberately fixes an "
-                    "h11 bug there, so this reports expected divergences)")
+    ap.add_argument("--unpatched", action="store_true",
+                    help="compare against upstream h11 without the chunk_start fix "
+                    "(reports the expected chunk_start divergences)")
     ap.add_argument("--show", type=int, default=5, help="divergences to print")
     args = ap.parse_args()
+    if not args.unpatched:
+        patch_chunk_start_fix()
 
     rng = random.Random(args.seed)
     cases = [gen_case(rng) for _ in range(args.cases)]
@@ -410,18 +429,17 @@ def main():
         sys.exit(2)
 
     divergences = 0
-    allow = not args.strict_chunk_start
     for idx, ((role, variant, chunks), mbt) in enumerate(zip(cases, mbt_traces)):
         a = run_case(h11.CLIENT if role == "C" else h11.SERVER, variant, chunks)
         b = mbt
-        if len(a) != len(b) or not all(same_line(x, y, allow) for x, y in zip(a, b)):
+        if a != b:
             divergences += 1
             if divergences <= args.show:
                 print(f"--- case {idx}: role={role}{variant} input={b''.join(chunks)!r} chunks={len(chunks)}")
                 for x, y in zip(a + [""] * len(b), b + [""] * len(a)):
                     if not x and not y:
                         break
-                    mark = "  " if same_line(x, y, allow) else "!!"
+                    mark = "  " if x == y else "!!"
                     print(f"{mark} py : {x}")
                     if x != y:
                         print(f"{mark} mbt: {y}")
