@@ -92,3 +92,31 @@ test "chunk_start survives a chunk header arriving without its data" {
   c.receive_data(b"c\r\n")
   assert_eq(c.next_event(), Event(data(b"c", chunk_end=true)))
 }
+
+///|
+test "EOF error formats the Content-Length like Python (no leading zeros)" {
+  for
+    case in [
+      (b"0005", "expected 5"),
+      (b"0", "expected 0"),
+      (b"000", "expected 0"),
+    ] {
+    let (declared, expected) = case
+    let c = @h11.Connection::new(Server)
+    c.receive_data(
+      b"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: " +
+      declared +
+      b"\r\n\r\na",
+    )
+    let events = get_all_events(c)
+    if declared == b"0005" {
+      c.receive_data(b"")
+      let e = expect_remote_error(() => ignore(c.next_event()))
+      assert_true(e.message().has_suffix(expected + ")"), msg=e.message())
+    } else {
+      // Content-Length 0: the body is complete, trailing data is the next
+      // request (which is garbage here).
+      assert_true(events is [Request(_), EndOfMessage(_)])
+    }
+  }
+}

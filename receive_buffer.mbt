@@ -59,7 +59,9 @@ fn ReceiveBuffer::append(self : ReceiveBuffer, bytes : BytesView) -> Unit {
   if needed < 0 {
     abort("receive buffer size overflow")
   }
-  if self.end + bytes.length() > self.data.length() {
+  // (Compare against the free space rather than computing `end + n`, which
+  // could overflow for very large buffers.)
+  if bytes.length() > self.data.length() - self.end {
     if needed <= self.data.length() / 2 {
       // At least half the storage is free after compaction, so the bytes
       // moved here are paid for by the bytes consumed since the last

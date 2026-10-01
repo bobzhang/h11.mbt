@@ -65,8 +65,16 @@ fn reader_for_state(role : Role, state : State) -> Reader? {
 fn reader_for_framing(framing : Framing) -> Reader {
   match framing {
     ContentLength(length, declared~) => {
+      // Python formats the parsed integer, so drop leading zeros (but keep
+      // all the digits of values too large for an Int64).
       let declared = match declared {
-        Some(d) => @utf8.decode_lossy(d)
+        Some(d) => {
+          let mut i = 0
+          while i < d.length() - 1 && d[i] == b'0' {
+            i += 1
+          }
+          @utf8.decode_lossy(d[i:])
+        }
         None => length.to_string()
       }
       ContentLength({ length, declared, remaining: length, })
