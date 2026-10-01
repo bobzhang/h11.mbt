@@ -60,19 +60,158 @@ fn fmt_event(e : @h11.Event) -> String {
 }
 
 ///|
-fn state_name(s : @h11.State) -> String {
-  s.to_string()
+/// Events the client sends before reading, per variant (see client_script
+/// in difftest.py).
+fn client_script(variant : Int) -> Array[@h11.Event] raise {
+  let host = (b"Host", b"x")
+  match variant {
+    1 =>
+      [
+        Request(@h11.Request::new(method_=b"HEAD", target=b"/", headers=[host])),
+        EndOfMessage(@h11.EndOfMessage::new()),
+      ]
+    2 =>
+      [
+        Request(
+          @h11.Request::new(method_=b"CONNECT", target=b"x:443", headers=[host]),
+        ),
+        EndOfMessage(@h11.EndOfMessage::new()),
+      ]
+    3 =>
+      [
+        Request(
+          @h11.Request::new(method_=b"GET", target=b"/", headers=[
+            host,
+            (b"Upgrade", b"websocket"),
+            (b"Connection", b"Upgrade"),
+          ]),
+        ),
+        EndOfMessage(@h11.EndOfMessage::new()),
+      ]
+    4 =>
+      [
+        Request(
+          @h11.Request::new(method_=b"POST", target=b"/", headers=[
+            host,
+            (b"Content-Length", b"5"),
+          ]),
+        ),
+        Data(@h11.Data::new(b"hello")),
+        EndOfMessage(@h11.EndOfMessage::new()),
+      ]
+    5 =>
+      // an upload still in progress when the response arrives
+      [
+        Request(
+          @h11.Request::new(method_=b"POST", target=b"/", headers=[
+            host,
+            (b"Transfer-Encoding", b"chunked"),
+            (b"Expect", b"100-continue"),
+          ]),
+        ),
+        Data(@h11.Data::new(b"abc")),
+      ]
+    _ =>
+      [
+        Request(@h11.Request::new(method_=b"GET", target=b"/", headers=[host])),
+        EndOfMessage(@h11.EndOfMessage::new()),
+      ]
+  }
 }
 
 ///|
-fn run_case(role : @h11.Role, chunks : Array[Bytes], out : Array[String]) -> Unit {
+/// Events the server sends in response to a finished request (see
+/// server_script in difftest.py).
+fn server_script(variant : Int) -> Array[@h11.Event] raise {
+  match variant {
+    1 =>
+      [
+        Response(@h11.Response::new(status_code=200, headers=[])),
+        Data(@h11.Data::new(b"hi")),
+        EndOfMessage(@h11.EndOfMessage::new()),
+      ]
+    2 =>
+      [
+        InformationalResponse(
+          @h11.InformationalResponse::new(status_code=101, headers=[
+            (b"Upgrade", b"websocket"),
+          ]),
+        ),
+      ]
+    3 =>
+      [
+        InformationalResponse(
+          @h11.InformationalResponse::new(status_code=100, headers=[]),
+        ),
+        Response(
+          @h11.Response::new(status_code=200, headers=[
+            (b"Content-Length", b"2"),
+          ]),
+        ),
+        Data(@h11.Data::new(b"ok")),
+        EndOfMessage(@h11.EndOfMessage::new()),
+      ]
+    4 =>
+      [
+        Response(@h11.Response::new(status_code=204, headers=[])),
+        EndOfMessage(@h11.EndOfMessage::new()),
+      ]
+    5 =>
+      [
+        Response(
+          @h11.Response::new(status_code=404, headers=[
+            (b"Connection", b"close"),
+            (b"Content-Length", b"0"),
+          ]),
+        ),
+        EndOfMessage(@h11.EndOfMessage::new()),
+      ]
+    _ =>
+      [
+        Response(
+          @h11.Response::new(status_code=200, headers=[
+            (b"Content-Length", b"0"),
+          ]),
+        ),
+        EndOfMessage(@h11.EndOfMessage::new()),
+      ]
+  }
+}
+
+///|
+/// Send events one by one, recording each; stop at the first failure.
+fn send_all(
+  conn : @h11.Connection,
+  events : Array[@h11.Event],
+  out : Array[String],
+) -> Bool {
+  for ev in events {
+    let data = conn.send(ev) catch {
+      e => {
+        out.push("SENDERR \{protocol_message(e)}")
+        return false
+      }
+    }
+    out.push(
+      match data {
+        None => "SENT CLOSE"
+        Some(d) => "SENT \{hex(d)}"
+      },
+    )
+  }
+  true
+}
+
+///|
+fn run_case(
+  role : @h11.Role,
+  variant : Int,
+  chunks : Array[Bytes],
+  out : Array[String],
+) -> Unit {
   let conn = @h11.Connection::new(role)
   if role is Client {
-    let req = try! @h11.Request::new(method_=b"GET", target=b"/", headers=[
-      (b"Host", b"x"),
-    ])
-    ignore(try! conn.send(Request(req)))
-    ignore(try! conn.send(EndOfMessage(try! @h11.EndOfMessage::new())))
+    ignore(send_all(conn, try! client_script(variant), out))
   }
   // Server only: answer a finished request and start the next cycle.
   let respond = () => {
@@ -82,19 +221,9 @@ fn run_case(role : @h11.Role, chunks : Array[Bytes], out : Array[String]) -> Uni
     let mut progressed = false
     if conn.our_state() is SendResponse &&
       conn.their_state() is (Done | MustClose | Closed | MightSwitchProtocol) {
-      let sent = try {
-        let resp = @h11.Response::new(status_code=200, headers=[
-          (b"Content-Length", b"0"),
-        ])
-        let a = conn.send(Response(resp)).unwrap()
-        a + conn.send(EndOfMessage(@h11.EndOfMessage::new())).unwrap()
-      } catch {
-        e => {
-          out.push("SENDERR \{protocol_message(e)}")
-          return false
-        }
+      if !send_all(conn, try! server_script(variant), out) {
+        return false
       }
-      out.push("SENT \{hex(sent)}")
       progressed = true
     }
     if conn.our_state() is Done && conn.their_state() is Done {
@@ -144,7 +273,10 @@ fn run_case(role : @h11.Role, chunks : Array[Bytes], out : Array[String]) -> Uni
     }
   }
   let states = conn.states()
-  out.push("STATES \{state_name(states.client)} \{state_name(states.server)}")
+  let (trail, closed) = conn.trailing_data()
+  out.push(
+    "STATES \{states.client} \{states.server} TRAIL \{hex(trail)} \{fmt_bool(closed)}",
+  )
 }
 
 ///|
@@ -170,14 +302,15 @@ fn main {
       continue
     }
     let role : @h11.Role = if line.has_prefix("C") { Client } else { Server }
-    let rest = line[2:]
+    let variant = line.code_unit_at(1).to_int() - '0'.to_int()
+    let rest = line[3:]
     let chunks = if rest.is_empty() {
       []
     } else {
       rest.split(",").map(unhex).to_array()
     }
     let out = []
-    run_case(role, chunks, out)
+    run_case(role, variant, chunks, out)
     for o in out {
       println(o)
     }

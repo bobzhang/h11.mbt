@@ -76,12 +76,70 @@ def protocol_message(e):
     return f"Other {type(e).__name__}: {e}"
 
 
-def run_case(role, chunks):
+def client_script(variant):
+    """Events the client sends before reading, per variant."""
+    host = (b"Host", b"x")
+    if variant == 1:
+        return [h11.Request(method=b"HEAD", target=b"/", headers=[host]), h11.EndOfMessage()]
+    if variant == 2:
+        return [h11.Request(method=b"CONNECT", target=b"x:443", headers=[host]), h11.EndOfMessage()]
+    if variant == 3:
+        return [
+            h11.Request(method=b"GET", target=b"/", headers=[host, (b"Upgrade", b"websocket"), (b"Connection", b"Upgrade")]),
+            h11.EndOfMessage(),
+        ]
+    if variant == 4:
+        return [
+            h11.Request(method=b"POST", target=b"/", headers=[host, (b"Content-Length", b"5")]),
+            h11.Data(data=b"hello"),
+            h11.EndOfMessage(),
+        ]
+    if variant == 5:
+        # an upload still in progress when the response arrives
+        return [
+            h11.Request(method=b"POST", target=b"/", headers=[host, (b"Transfer-Encoding", b"chunked"), (b"Expect", b"100-continue")]),
+            h11.Data(data=b"abc"),
+        ]
+    return [h11.Request(method=b"GET", target=b"/", headers=[host]), h11.EndOfMessage()]
+
+
+def server_script(variant):
+    """Events the server sends in response to a finished request."""
+    if variant == 1:
+        return [h11.Response(status_code=200, headers=[]), h11.Data(data=b"hi"), h11.EndOfMessage()]
+    if variant == 2:
+        return [h11.InformationalResponse(status_code=101, headers=[(b"Upgrade", b"websocket")])]
+    if variant == 3:
+        return [
+            h11.InformationalResponse(status_code=100, headers=[]),
+            h11.Response(status_code=200, headers=[(b"Content-Length", b"2")]),
+            h11.Data(data=b"ok"),
+            h11.EndOfMessage(),
+        ]
+    if variant == 4:
+        return [h11.Response(status_code=204, headers=[]), h11.EndOfMessage()]
+    if variant == 5:
+        return [h11.Response(status_code=404, headers=[(b"Connection", b"close"), (b"Content-Length", b"0")]), h11.EndOfMessage()]
+    return [h11.Response(status_code=200, headers=[(b"Content-Length", b"0")]), h11.EndOfMessage()]
+
+
+def send_all(conn, events, out):
+    """Send events one by one, recording each; stop at the first failure."""
+    for ev in events:
+        try:
+            data = conn.send(ev)
+        except Exception as e:  # noqa: BLE001
+            out.append(f"SENDERR {protocol_message(e)}")
+            return False
+        out.append("SENT " + ("CLOSE" if data is None else data.hex()))
+    return True
+
+
+def run_case(role, variant, chunks):
     out = []
     conn = h11.Connection(role)
     if role is h11.CLIENT:
-        conn.send(h11.Request(method=b"GET", target=b"/", headers=[(b"Host", b"x")]))
-        conn.send(h11.EndOfMessage())
+        send_all(conn, client_script(variant), out)
 
     def respond():
         if role is not h11.SERVER:
@@ -93,13 +151,8 @@ def run_case(role, chunks):
             h11.CLOSED,
             h11.MIGHT_SWITCH_PROTOCOL,
         ):
-            try:
-                resp = h11.Response(status_code=200, headers=[(b"Content-Length", b"0")])
-                sent = conn.send(resp) + conn.send(h11.EndOfMessage())
-            except Exception as e:  # noqa: BLE001
-                out.append(f"SENDERR {protocol_message(e)}")
+            if not send_all(conn, server_script(variant), out):
                 return False
-            out.append(f"SENT {sent.hex()}")
             progressed = True
         if conn.our_state is h11.DONE and conn.their_state is h11.DONE:
             conn.start_next_cycle()
@@ -136,7 +189,8 @@ def run_case(role, chunks):
             break
         respond()
     states = conn.states
-    out.append(f"STATES {states[h11.CLIENT]} {states[h11.SERVER]}")
+    data, closed = conn.trailing_data
+    out.append(f"STATES {states[h11.CLIENT]} {states[h11.SERVER]} TRAIL {bytes(data).hex()} {int(closed)}")
     return out
 
 
@@ -211,6 +265,9 @@ def valid_request(rng):
         body = chunked_body(rng)
     for _ in range(rng.randint(0, 3)):
         lines.append(random_header(rng))
+    if rng.random() < 0.02:
+        # around the 16 KiB incomplete-event limit
+        lines.append(b"Big: " + b"a" * rng.randint(15000, 17500))
     eol = rng.choice([b"\r\n", b"\r\n", b"\n"])
     return eol.join(lines) + eol + eol + body
 
@@ -267,6 +324,7 @@ GARBAGE_TOKENS = [
 
 def gen_case(rng):
     role = rng.choice(["S", "S", "C"])
+    variant = rng.randrange(6)
     make = valid_request if role == "S" else valid_response
     kind = rng.random()
     if kind < 0.3:
@@ -286,7 +344,7 @@ def gen_case(rng):
             start = c
     if start < len(data):
         chunks.append(data[start:])
-    return role, chunks
+    return role, variant, chunks
 
 
 # ---------------------------------------------------------------- comparison
@@ -299,10 +357,20 @@ def build_moonbit():
     return exe
 
 
-def normalize(line, ignore_chunk_start):
-    if ignore_chunk_start and line.startswith("DATA "):
-        return line[:-2] + "?" + line[-1]
-    return line
+def same_line(py, mbt, allow_chunk_start_fix):
+    if py == mbt:
+        return True
+    # The one deliberate divergence: Python reports chunk_start=False for data
+    # whose chunk header arrived in an earlier read; we report True.
+    return (
+        allow_chunk_start_fix
+        and py.startswith("DATA ")
+        and mbt.startswith("DATA ")
+        and py[:-2] == mbt[:-2]
+        and py[-1] == mbt[-1]
+        and py[-2] == "0"
+        and mbt[-2] == "1"
+    )
 
 
 def main():
@@ -320,8 +388,8 @@ def main():
     batch = os.path.join(HERE, "_build", "difftest_cases.txt")
     os.makedirs(os.path.dirname(batch), exist_ok=True)
     with open(batch, "w") as f:
-        for role, chunks in cases:
-            f.write(role + " " + ",".join(c.hex() for c in chunks) + "\n")
+        for role, variant, chunks in cases:
+            f.write(f"{role}{variant} " + ",".join(c.hex() for c in chunks) + "\n")
 
     exe = build_moonbit()
     proc = subprocess.run([exe, batch], capture_output=True, text=True)
@@ -332,25 +400,28 @@ def main():
             cur = []
         else:
             cur.append(line)
-    if proc.returncode != 0:
-        role, chunks = cases[len(mbt_traces)]
-        print(f"MoonBit driver crashed on case {len(mbt_traces)}: role={role} chunks={chunks!r}")
+    if proc.returncode != 0 or cur or len(mbt_traces) != len(cases):
+        n = len(mbt_traces)
+        print(f"MoonBit driver failed (exit {proc.returncode}) after {n}/{len(cases)} cases")
+        if n < len(cases):
+            role, variant, chunks = cases[n]
+            print(f"next case: role={role}{variant} chunks={chunks!r}")
         print(proc.stderr[-2000:])
-        sys.exit(1)
+        sys.exit(2)
 
     divergences = 0
-    for idx, ((role, chunks), mbt) in enumerate(zip(cases, mbt_traces)):
-        py = run_case(h11.CLIENT if role == "C" else h11.SERVER, chunks)
-        a = [normalize(l, not args.strict_chunk_start) for l in py]
-        b = [normalize(l, not args.strict_chunk_start) for l in mbt]
-        if a != b:
+    allow = not args.strict_chunk_start
+    for idx, ((role, variant, chunks), mbt) in enumerate(zip(cases, mbt_traces)):
+        a = run_case(h11.CLIENT if role == "C" else h11.SERVER, variant, chunks)
+        b = mbt
+        if len(a) != len(b) or not all(same_line(x, y, allow) for x, y in zip(a, b)):
             divergences += 1
             if divergences <= args.show:
-                print(f"--- case {idx}: role={role} input={b''.join(chunks)!r} chunks={len(chunks)}")
+                print(f"--- case {idx}: role={role}{variant} input={b''.join(chunks)!r} chunks={len(chunks)}")
                 for x, y in zip(a + [""] * len(b), b + [""] * len(a)):
                     if not x and not y:
                         break
-                    mark = "  " if x == y else "!!"
+                    mark = "  " if same_line(x, y, allow) else "!!"
                     print(f"{mark} py : {x}")
                     if x != y:
                         print(f"{mark} mbt: {y}")
