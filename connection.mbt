@@ -98,8 +98,9 @@ pub struct Connection {
   priv their_role : Role
   priv max_incomplete_event_size : Int
   priv cstate : ConnectionState
-  // Readers/writers for converting data <-> events given the current state
-  priv mut writer : Writer?
+  // Reader for their messages, and writer for our message bodies, given the
+  // current states
+  priv mut body_writer : BodyWriter?
   priv mut reader : Reader?
   // Holds any unprocessed received data
   priv receive_buffer : ReceiveBuffer
@@ -132,7 +133,7 @@ pub fn Connection::new(
     their_role,
     max_incomplete_event_size,
     cstate: ConnectionState::new(),
-    writer: writer_for_state(our_role, Idle),
+    body_writer: None,
     reader: reader_for_state(their_role, Idle),
     receive_buffer: ReceiveBuffer::new(),
     receive_buffer_closed: false,
@@ -207,8 +208,8 @@ pub fn Connection::start_next_cycle(
   self.cstate.start_next_cycle()
   self.request_method = None
   // their_http_version gets left alone, since it presumably lasts beyond a
-  // single request/response cycle
-  guard! !self.client_is_waiting_for_100_continue
+  // single request/response cycle. (client_is_waiting_for_100_continue is
+  // already false: the client's EndOfMessage cleared it.)
   self.respond_to_state_changes(old_states, None)
 }
 
@@ -304,9 +305,9 @@ fn Connection::respond_to_state_changes(
 ) -> Unit {
   // Update reader/writer
   if self.our_state() != old_states.get(self.our_role) {
-    self.writer = match self.our_state() {
+    self.body_writer = match self.our_state() {
       SendBody => Some(writer_for_framing(self.framing_for(event)))
-      state => writer_for_state(self.our_role, state)
+      _ => None
     }
   }
   if self.their_state() != old_states.get(self.their_role) {
@@ -505,23 +506,40 @@ pub fn Connection::send_with_data_passthrough(
       Event::Response(self.clean_up_response_headers_for_sending(resp))
     e => e
   }
-  // We want to call process_event before calling the writer, because if
+  // We want to call process_event before writing anything, because if
   // someone tries to do something invalid then this will give a sensible
   // error message, while our writers all just assume they will only receive
-  // valid events. But, process_event might change self.writer. So we have
-  // to do a little dance:
-  let writer = self.writer
+  // valid events. But, process_event might replace self.body_writer (e.g.
+  // EndOfMessage leaves SEND_BODY), so we grab it first:
+  let body_writer = self.body_writer
   self.process_event(self.our_role, event)
-  if event is ConnectionClosed {
-    None
-  } else {
-    // In any situation where writer is None, process_event should have
-    // raised ProtocolError
-    guard! writer is Some(writer)
-    let data_list = []
-    writer.write(event, data_list)
-    Some(data_list)
+  let data_list = []
+  match (event, body_writer) {
+    (ConnectionClosed, _) => return None
+    (Request(r), _) => write_request(r, data_list)
+    (InformationalResponse(r), _) =>
+      write_any_response(
+        r.status_code,
+        r.headers,
+        r.http_version,
+        r.reason,
+        data_list,
+      )
+    (Response(r), _) =>
+      write_any_response(
+        r.status_code,
+        r.headers,
+        r.http_version,
+        r.reason,
+        data_list,
+      )
+    (Data(d), Some(w)) => w.send_data(d.data, data_list)
+    (EndOfMessage(eom), Some(w)) => w.send_eom(eom.headers, data_list)
+    // process_event only accepts Data/EndOfMessage in SEND_BODY, where the
+    // body writer is always set.
+    (Data(_) | EndOfMessage(_), None) => abort("body event outside SEND_BODY")
   }
+  Some(data_list)
 }
 
 ///|

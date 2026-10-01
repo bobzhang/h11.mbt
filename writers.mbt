@@ -8,27 +8,18 @@ priv struct ContentLengthWriter {
 }
 
 ///|
-priv enum Writer {
-  WriteRequest
-  WriteAnyResponse
+/// Writers for message bodies (WRITERS[SEND_BODY] in Python). Message heads
+/// need no writer state: `write_request` and `write_any_response` are
+/// chosen directly from the event.
+priv enum BodyWriter {
   ContentLength(ContentLengthWriter)
   Chunked
   Http10
 }
 
 ///|
-/// WRITERS[(role, state)] for the non-body states.
-fn writer_for_state(role : Role, state : State) -> Writer? {
-  match (role, state) {
-    (Client, Idle) => Some(WriteRequest)
-    (Server, Idle | SendResponse) => Some(WriteAnyResponse)
-    _ => None
-  }
-}
-
-///|
 /// WRITERS[SEND_BODY][framing](*args)
-fn writer_for_framing(framing : Framing) -> Writer {
+fn writer_for_framing(framing : Framing) -> BodyWriter {
   match framing {
     ContentLength(length, ..) => ContentLength({ length, })
     Chunked => Chunked
@@ -91,81 +82,63 @@ fn write_any_response(
 }
 
 ///|
-fn Writer::write(
-  self : Writer,
-  event : Event,
+// These are careful not to do anything to `data` except take its length and
+// push it to `out`, so `send_with_data_passthrough` hands back the very same
+// `Bytes` object.
+fn BodyWriter::send_data(
+  self : BodyWriter,
+  data : Bytes,
   out : Array[Bytes],
 ) -> Unit raise ProtocolError {
-  match (self, event) {
-    (WriteRequest, Request(r)) => write_request(r, out)
-    (WriteAnyResponse, InformationalResponse(r)) =>
-      write_any_response(
-        r.status_code,
-        r.headers,
-        r.http_version,
-        r.reason,
-        out,
-      )
-    (WriteAnyResponse, Response(r)) =>
-      write_any_response(
-        r.status_code,
-        r.headers,
-        r.http_version,
-        r.reason,
-        out,
-      )
-    (ContentLength(w), Data(d)) => {
-      w.length -= d.data.length().to_int64()
+  match self {
+    ContentLength(w) => {
+      w.length -= data.length().to_int64()
       if w.length < 0L {
         raise local_error("Too much data for declared Content-Length")
       }
-      out.push(d.data)
+      out.push(data)
     }
-    (ContentLength(w), EndOfMessage(eom)) => {
-      if w.length != 0L {
-        raise local_error("Too little data for declared Content-Length")
-      }
-      if !eom.headers.is_empty() {
-        raise local_error("Content-Length and trailers don't mix")
-      }
-    }
-    (Chunked, Data(d)) =>
+    Chunked =>
       // if we encoded 0-length data in the naive way, it would look like an
       // end-of-message.
-      if !d.data.is_empty() {
+      if !data.is_empty() {
         out.push(
           bytes_concat([
-            @utf8.encode(d.data.length().to_string(radix=16)),
+            @utf8.encode(data.length().to_string(radix=16)),
             b"\r\n",
           ]),
         )
-        out.push(d.data)
+        out.push(data)
         out.push(b"\r\n")
       }
-    (Chunked, EndOfMessage(eom)) => {
-      out.push(b"0\r\n")
-      write_headers(eom.headers, out)
-    }
-    (Http10, Data(d)) => out.push(d.data)
-    (Http10, EndOfMessage(eom)) =>
-      if !eom.headers.is_empty() {
-        raise local_error("can't send trailers to HTTP/1.0 client")
-      }
-    // no need to close the socket ourselves, that will be taken care of by
-    // Connection: close machinery
-    _ => abort("writer \{self} can't handle event \{event.event_type()}")
+    Http10 => out.push(data)
   }
 }
 
 ///|
-impl Show for Writer with fn output(self, logger) {
-  logger.write_string(
-    match self {
-      WriteRequest => "write_request"
-      WriteAnyResponse => "write_any_response"
-      ContentLength(_) => "ContentLengthWriter"
-      Chunked => "ChunkedWriter"
-      Http10 => "Http10Writer"
-    },
-  )
+fn BodyWriter::send_eom(
+  self : BodyWriter,
+  headers : Headers,
+  out : Array[Bytes],
+) -> Unit raise ProtocolError {
+  match self {
+    ContentLength(w) => {
+      if w.length != 0L {
+        raise local_error("Too little data for declared Content-Length")
+      }
+      if !headers.is_empty() {
+        raise local_error("Content-Length and trailers don't mix")
+      }
+    }
+    Chunked => {
+      out.push(b"0\r\n")
+      write_headers(headers, out)
+    }
+    Http10 =>
+      if !headers.is_empty() {
+        raise local_error("can't send trailers to HTTP/1.0 client")
+      }
+    // no need to close the socket ourselves, that will be taken care of by
+    // Connection: close machinery
+  }
 }

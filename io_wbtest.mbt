@@ -112,8 +112,44 @@ fn[T] tw(
 
 ///|
 /// Adapts a `Writer` to the callable shape used by `dowrite`/`tw`.
-fn writer_fn(w : Writer) -> (Event, Array[Bytes]) -> Unit raise {
-  (event, out) => w.write(event, out)
+fn writer_fn(w : BodyWriter) -> (Event, Array[Bytes]) -> Unit raise {
+  (event, out) => {
+    match event {
+      Data(d) => w.send_data(d.data, out)
+      EndOfMessage(eom) => w.send_eom(eom.headers, out)
+      e => fail("body writers only handle Data/EndOfMessage, got \{Repr(e)}")
+    }
+  }
+}
+
+///|
+/// WRITERS[(role, state)] for message heads, as in Python's test.
+fn head_writer_fn(
+  role : Role,
+  state : State,
+) -> (Event, Array[Bytes]) -> Unit raise {
+  (event, out) => {
+    match (role, state, event) {
+      (Client, Idle, Request(r)) => write_request(r, out)
+      (Server, Idle | SendResponse, InformationalResponse(r)) =>
+        write_any_response(
+          r.status_code,
+          r.headers,
+          r.http_version,
+          r.reason,
+          out,
+        )
+      (Server, Idle | SendResponse, Response(r)) =>
+        write_any_response(
+          r.status_code,
+          r.headers,
+          r.http_version,
+          r.reason,
+          out,
+        )
+      _ => fail("no head writer for \{role}/\{state}")
+    }
+  }
 }
 
 ///|
@@ -172,7 +208,7 @@ fn server_send_response_reader() -> Reader {
 test "writers_simple" {
   for case in simple_cases() {
     let (role, state, event, binary) = case
-    tw(writer_fn(writer_for_state(role, state).unwrap()), event, binary)
+    tw(head_writer_fn(role, state), event, binary)
   }
 }
 

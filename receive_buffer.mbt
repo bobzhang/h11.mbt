@@ -160,14 +160,18 @@ fn ReceiveBuffer::maybe_extract_lines(self : ReceiveBuffer) -> Array[Bytes]? {
   }
   // Only search in buffer space that we've not already looked at:
   // find the first match of /\n\r?\n/.
+  // `head_end` is where the blank line starts, `found` where it ends.
+  let mut head_end = -1
   let mut found = -1
   for i in self.multiple_lines_search..<len {
     if self.at(i) == b'\n' {
       if i + 1 < len && self.at(i + 1) == b'\n' {
+        head_end = i
         found = i + 2
         break
       }
       if i + 2 < len && self.at(i + 1) == b'\r' && self.at(i + 2) == b'\n' {
+        head_end = i
         found = i + 3
         break
       }
@@ -177,20 +181,18 @@ fn ReceiveBuffer::maybe_extract_lines(self : ReceiveBuffer) -> Array[Bytes]? {
     self.multiple_lines_search = if len > 2 { len - 2 } else { 0 }
     return None
   }
-  // Truncate the buffer and return it.
+  // Truncate the buffer and split everything before the blank line into
+  // lines, accepting both \r\n and bare \n as terminators.
   let out = self.extract(found)
-  let lines = split_on(out, b'\n').map(line => {
-    if line is [.. rest, b'\r'] {
-      rest.to_owned()
-    } else {
-      line.to_owned()
-    }
-  })
-  guard! lines.length() >= 2 &&
-    lines[lines.length() - 1].is_empty() &&
-    lines[lines.length() - 2].is_empty()
-  lines.truncate(lines.length() - 2)
-  Some(lines)
+  Some(
+    split_on(out[:head_end], b'\n').map(line => {
+      if line is [.. rest, b'\r'] {
+        rest.to_owned()
+      } else {
+        line.to_owned()
+      }
+    }),
+  )
 }
 
 ///|

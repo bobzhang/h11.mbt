@@ -229,8 +229,9 @@ fn ConnectionState::process_event(
   server_switch_event? : SwitchType,
 ) -> Unit raise ProtocolError {
   let key = match server_switch_event {
+    // Only server rows of the transition table accept `Switch` keys, so a
+    // client event with a switch annotation is rejected below.
     Some(switch_event) => {
-      guard! role is Server
       if !self.pending_switch_proposals.contains(switch_event) {
         raise local_error(
           "Received server _SWITCH_UPGRADE event without a pending proposal",
@@ -247,8 +248,8 @@ fn ConnectionState::process_event(
   }
   self.fire_event_triggered_transitions(role, key)
   // Special case: the server state does get to see Request events.
-  if key is Plain(Request) {
-    guard! role is Client
+  // (A server-sent Request was already rejected by the table above.)
+  if key is Plain(Request) && role is Client {
     self.fire_event_triggered_transitions(Server, ClientRequest)
   }
   self.fire_state_triggered_transitions()
@@ -325,11 +326,12 @@ fn ConnectionState::fire_state_triggered_transitions(
 fn ConnectionState::start_next_cycle(
   self : ConnectionState,
 ) -> Unit raise ProtocolError {
-  if self.states != { client: Done, server: Done, } {
+  // (DONE/DONE can't be reached with keep-alive disabled or a pending
+  // protocol switch, but checking costs nothing and keeps this total.)
+  if self.states != { client: Done, server: Done, } ||
+    !self.keep_alive ||
+    !self.pending_switch_proposals.is_empty() {
     raise local_error("not in a reusable state. self.states=\{self.states}")
   }
-  // Can't reach DONE/DONE with any of these active, but still, let's be sure.
-  guard! self.keep_alive
-  guard! self.pending_switch_proposals.is_empty()
   self.states = { client: Idle, server: Idle, }
 }
