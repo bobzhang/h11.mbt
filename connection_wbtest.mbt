@@ -68,6 +68,17 @@ fn framing_req(cl? : Int, te? : Bool = false) -> Event raise {
 }
 
 ///|
+/// Python's `_body_framing(request_method, event)`, in terms of the typed
+/// `request_framing` / `response_framing`.
+fn body_framing(request_method : Bytes?, event : Event) -> Framing {
+  match event {
+    Request(req) => request_framing(req)
+    Response(resp) => response_framing(request_method, resp)
+    _ => abort("body_framing needs a Request or Response")
+  }
+}
+
+///|
 test "_body_framing" {
   // Special cases where the headers are ignored:
   for

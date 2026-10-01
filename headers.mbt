@@ -14,6 +14,12 @@ let content_length_max_digits = 20
 /// original casing.
 pub struct Headers {
   priv full_items : Array[(Bytes, Bytes, Bytes)]
+  // Framing facts established during validation, so that body framing never
+  // has to re-parse (or re-check) the headers.
+  /// `Transfer-Encoding: chunked` is present (the only coding we accept).
+  priv chunked : Bool
+  /// The (deduplicated) Content-Length, with the digits as written.
+  priv content_length : (Int64, Bytes)?
 }
 
 ///|
@@ -31,7 +37,7 @@ pub fn Headers::new(
 ///|
 /// An empty header list.
 pub fn Headers::empty() -> Headers {
-  { full_items: [], }
+  { full_items: [], chunked: false, content_length: None, }
 }
 
 ///|
@@ -117,7 +123,7 @@ fn normalize_and_validate(
   parsed~ : Bool,
 ) -> Headers raise ProtocolError {
   let new_headers = []
-  let mut seen_content_length : Bytes? = None
+  let mut seen_content_length : (Int64, Bytes)? = None
   let mut saw_transfer_encoding = false
   for header in headers {
     let (raw_name, value) = header
@@ -147,12 +153,16 @@ fn normalize_and_validate(
       if value.length() > content_length_max_digits {
         raise local_error("bad Content-Length")
       }
+      let length = match parse_decimal(value) {
+        Some(n) => n
+        None => raise local_error("bad Content-Length")
+      }
       match seen_content_length {
         None => {
-          seen_content_length = Some(value)
+          seen_content_length = Some((length, value))
           new_headers.push((raw_name, name, value))
         }
-        Some(seen) =>
+        Some((_, seen)) =>
           if seen != value {
             raise local_error("conflicting Content-Length headers")
           }
@@ -182,7 +192,11 @@ fn normalize_and_validate(
       new_headers.push((raw_name, name, value))
     }
   }
-  { full_items: new_headers, }
+  {
+    full_items: new_headers,
+    chunked: saw_transfer_encoding,
+    content_length: seen_content_length,
+  }
 }
 
 ///|

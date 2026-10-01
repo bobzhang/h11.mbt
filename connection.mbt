@@ -49,48 +49,42 @@ fn keep_alive(headers : Headers, http_version : Bytes) -> Bool {
 }
 
 ///|
-/// Figure out the framing of the body that follows `event`, which must be a
-/// `Request` or a `Response`. Reference: RFC 7230 section 3.3.3.
-fn body_framing(request_method : Bytes?, event : Event) -> Framing {
-  let headers = match event {
-    Response(resp) => {
-      // Step 1: some responses always have an empty body, regardless of what
-      // the headers say.
-      if resp.status_code is (204 | 304) ||
-        request_method is Some(b"HEAD") ||
-        (
-          request_method is Some(b"CONNECT") &&
-          resp.status_code >= 200 &&
-          resp.status_code < 300
-        ) {
-        return ContentLength(0L, declared=None)
-      }
-      // Section 3.3.3 also lists another case -- responses with status_code
-      // < 200. For us these are InformationalResponses, not Responses, so
-      // they can't get into this function in the first place.
-      guard! resp.status_code >= 200
-      resp.headers
-    }
-    Request(req) => req.headers
-    _ => abort("body_framing called with \{event.event_type()}")
+/// Steps 2 and 3 of RFC 7230 section 3.3.3: Transfer-Encoding beats
+/// Content-Length. `None` if neither is present.
+fn headers_framing(headers : Headers) -> Framing? {
+  if headers.chunked {
+    Some(Chunked)
+  } else if headers.content_length is Some((n, declared)) {
+    Some(ContentLength(n, declared=Some(declared)))
+  } else {
+    None
   }
-  // Step 2: check for Transfer-Encoding (T-E beats C-L):
-  let transfer_encodings = get_comma_header(headers, b"transfer-encoding")
-  if !transfer_encodings.is_empty() {
-    guard! transfer_encodings == [b"chunked"]
-    return Chunked
+}
+
+///|
+/// Framing of a request body: without framing headers there is no body.
+fn request_framing(req : Request) -> Framing {
+  headers_framing(req.headers).unwrap_or(ContentLength(0L, declared=None))
+}
+
+///|
+/// Framing of a response body, given the method of the request it answers.
+/// Reference: RFC 7230 section 3.3.3.
+fn response_framing(request_method : Bytes?, resp : Response) -> Framing {
+  // Step 1: some responses always have an empty body, regardless of what the
+  // headers say. (Section 3.3.3 also lists responses with status_code < 200;
+  // for us these are InformationalResponses, which never have a body.)
+  if resp.status_code is (204 | 304) ||
+    request_method is Some(b"HEAD") ||
+    (
+      request_method is Some(b"CONNECT") &&
+      resp.status_code >= 200 &&
+      resp.status_code < 300
+    ) {
+    return ContentLength(0L, declared=None)
   }
-  // Step 3: check for Content-Length
-  let content_lengths = get_comma_header(headers, b"content-length")
-  if !content_lengths.is_empty() {
-    guard! parse_decimal(content_lengths[0]) is Some(n)
-    return ContentLength(n, declared=Some(content_lengths[0]))
-  }
-  // Step 4: no applicable headers; fallback/default depends on type
-  match event {
-    Request(_) => ContentLength(0L, declared=None)
-    _ => Http10
-  }
+  // Step 4: no applicable headers: read until the connection closes.
+  headers_framing(resp.headers).unwrap_or(Http10)
 }
 
 ///|
@@ -325,8 +319,12 @@ fn Connection::respond_to_state_changes(
 
 ///|
 fn Connection::framing_for(self : Connection, event : Event?) -> Framing {
-  guard! event is Some(event)
-  body_framing(self.request_method, event)
+  match event {
+    Some(Request(req)) => request_framing(req)
+    Some(Response(resp)) => response_framing(self.request_method, resp)
+    // Only a Request or a Response can move a party into SEND_BODY.
+    _ => abort("entered SEND_BODY without a Request or Response")
+  }
 }
 
 ///|
@@ -555,14 +553,14 @@ fn Connection::clean_up_response_headers_for_sending(
   let mut headers = response.headers
   let mut need_close = false
   // HEAD requests need some special handling: they always act like they
-  // have Content-Length: 0, and that's how body_framing treats them. But
+  // have Content-Length: 0, and that's how response_framing treats them. But
   // their headers are supposed to match what we would send if the request
   // was a GET.
   let method_for_choosing_headers = match self.request_method {
     Some(b"HEAD") => Some(b"GET")
     m => m
   }
-  let framing = body_framing(method_for_choosing_headers, Response(response))
+  let framing = response_framing(method_for_choosing_headers, response)
   if framing is (Chunked | Http10) {
     // This response has a body of unknown length.
     // If our peer is HTTP/1.1, we use Transfer-Encoding: chunked
