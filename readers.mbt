@@ -23,6 +23,10 @@ priv struct ChunkedReader {
   /// tracks the bytes that we still need to match and throw away.
   mut bytes_to_discard : Bytes
   mut reading_trailer : Bool
+  /// A chunk header has been read but none of its data has been returned
+  /// yet. (Python h11 forgets this when the header and the data arrive in
+  /// separate reads, and reports `chunk_start=False`; we don't.)
+  mut chunk_start_pending : Bool
 }
 
 ///|
@@ -64,7 +68,12 @@ fn reader_for_framing(framing : Framing) -> Reader {
 
 ///|
 fn ChunkedReader::new() -> ChunkedReader {
-  { bytes_in_chunk: 0L, bytes_to_discard: b"", reading_trailer: false, }
+  {
+    bytes_in_chunk: 0L,
+    bytes_to_discard: b"",
+    reading_trailer: false,
+    chunk_start_pending: false,
+  }
 }
 
 ///|
@@ -271,7 +280,7 @@ fn ChunkedReader::read(
     }
     // else, fall through and read some more
   }
-  let chunk_start = if self.bytes_in_chunk == 0L {
+  if self.bytes_in_chunk == 0L {
     // We need to refill our chunk count
     guard buf.maybe_extract_next_line() is Some(chunk_header) else {
       return None
@@ -285,15 +294,15 @@ fn ChunkedReader::read(
       self.reading_trailer = true
       return self.read(buf)
     }
-    true
-  } else {
-    false
+    self.chunk_start_pending = true
   }
   guard! self.bytes_in_chunk > 0L
   guard buf.maybe_extract_at_most(self.bytes_in_chunk) is Some(data) else {
     return None
   }
   self.bytes_in_chunk -= data.length().to_int64()
+  let chunk_start = self.chunk_start_pending
+  self.chunk_start_pending = false
   let chunk_end = if self.bytes_in_chunk == 0L {
     self.bytes_to_discard = b"\r\n"
     true

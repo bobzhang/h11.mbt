@@ -7,7 +7,7 @@ h11 (from ../.repos/h11) and the MoonBit port (fuzz/difftest), and reports
 any case where the traces differ.
 
 Usage:
-    python3 fuzz/difftest.py [--cases N] [--seed S] [--ignore-chunk-start]
+    python3 fuzz/difftest.py [--cases N] [--seed S] [--strict-chunk-start]
 
 Requires `moon` and a clone of python-hyper/h11 in .repos/h11.
 """
@@ -309,8 +309,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", type=int, default=20000)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--ignore-chunk-start", action="store_true",
-                    help="don't compare Data.chunk_start (MoonBit fixes an h11 bug there)")
+    ap.add_argument("--strict-chunk-start", action="store_true",
+                    help="also compare Data.chunk_start (MoonBit deliberately fixes an "
+                    "h11 bug there, so this reports expected divergences)")
     ap.add_argument("--show", type=int, default=5, help="divergences to print")
     args = ap.parse_args()
 
@@ -340,8 +341,8 @@ def main():
     divergences = 0
     for idx, ((role, chunks), mbt) in enumerate(zip(cases, mbt_traces)):
         py = run_case(h11.CLIENT if role == "C" else h11.SERVER, chunks)
-        a = [normalize(l, args.ignore_chunk_start) for l in py]
-        b = [normalize(l, args.ignore_chunk_start) for l in mbt]
+        a = [normalize(l, not args.strict_chunk_start) for l in py]
+        b = [normalize(l, not args.strict_chunk_start) for l in mbt]
         if a != b:
             divergences += 1
             if divergences <= args.show:

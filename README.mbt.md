@@ -360,6 +360,8 @@ Differences worth knowing:
 - `Content-Length` values and chunk sizes are tracked as `Int64`. The same
   inputs as Python are accepted (up to 20 digits); values beyond 2^63 - 1
   saturate, which is unobservable in practice.
+- `Data.chunk_start` is `true` on the first data of every chunk. Python h11
+  reports `False` when a chunk header and its data arrive in separate reads.
 - `receive_data` after EOF raises `RuntimeError` (a MoonBit `suberror`).
 - Error messages quote received data as `b'...'` (Python shows
   `bytearray(b'...')`).
@@ -370,10 +372,22 @@ Differences worth knowing:
 moon test
 ```
 
-The test suite is a port of h11's own tests (`*_test.mbt` for the public
-API, `*_wbtest.mbt` for internals such as the state machine, readers,
-writers, and receive buffer). Every code block in this README also runs as
-a test.
+The test suite has three layers:
+
+- a port of h11's own tests (`*_test.mbt` for the public API, `*_wbtest.mbt`
+  for internals such as the state machine, readers, writers, and receive
+  buffer);
+- QuickCheck properties (`quickcheck_test.mbt`): round trips, fragmentation
+  invariance on valid, mutated, and garbage input, and robustness;
+- a differential fuzzer (`fuzz/`) that runs random and mutated byte streams
+  through both this port and Python h11 and compares the resulting events,
+  states, bytes sent, and error messages:
+
+```bash
+python3 fuzz/difftest.py --cases 100000 --seed 1
+```
+
+Every code block in this README also runs as a test.
 
 ## License and credits
 

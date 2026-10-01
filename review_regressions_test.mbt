@@ -76,3 +76,19 @@ test "EOF error quotes the declared Content-Length even beyond Int64" {
     content="peer closed connection without sending complete message body (received 0 bytes, expected 99999999999999999999)",
   )
 }
+
+///|
+test "chunk_start survives a chunk header arriving without its data" {
+  // Python h11 reports chunk_start=False here (upstream bug).
+  let c = @h11.Connection::new(Server)
+  c.receive_data(
+    b"POST / HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n",
+  )
+  ignore(c.next_event())
+  c.receive_data(b"3\r\n")
+  assert_eq(c.next_event(), NeedData)
+  c.receive_data(b"ab")
+  assert_eq(c.next_event(), Event(data(b"ab", chunk_start=true)))
+  c.receive_data(b"c\r\n")
+  assert_eq(c.next_event(), Event(data(b"c", chunk_end=true)))
+}
