@@ -17,16 +17,26 @@ priv struct ContentLengthReader {
 }
 
 ///|
+/// Where a chunked body reader is. Python h11 tracks this with three
+/// independent fields (`_bytes_in_chunk`, `_bytes_to_discard`,
+/// `_reading_trailer`) whose combinations are mostly meaningless; here each
+/// phase carries exactly the data it needs.
+priv enum ChunkPhase {
+  /// Waiting for a chunk-size line.
+  ChunkHeader
+  /// Inside a chunk with `remaining` (> 0) bytes of data still to come.
+  /// `started` is false until some of the chunk's data has been returned.
+  ChunkData(remaining~ : Int64, started~ : Bool)
+  /// After a chunk's data: these bytes of its CRLF still have to be matched
+  /// and thrown away.
+  ChunkFooter(Bytes)
+  /// After the last (zero-size) chunk: reading the trailer section.
+  Trailer
+}
+
+///|
 priv struct ChunkedReader {
-  mut bytes_in_chunk : Int64
-  /// After reading a chunk, we have to throw away the trailing \r\n. This
-  /// tracks the bytes that we still need to match and throw away.
-  mut bytes_to_discard : Bytes
-  mut reading_trailer : Bool
-  /// A chunk header has been read but none of its data has been returned
-  /// yet. (Python h11 forgets this when the header and the data arrive in
-  /// separate reads, and reports `chunk_start=False`; we don't.)
-  mut chunk_start_pending : Bool
+  mut phase : ChunkPhase
 }
 
 ///|
@@ -68,12 +78,7 @@ fn reader_for_framing(framing : Framing) -> Reader {
 
 ///|
 fn ChunkedReader::new() -> ChunkedReader {
-  {
-    bytes_in_chunk: 0L,
-    bytes_to_discard: b"",
-    reading_trailer: false,
-    chunk_start_pending: false,
-  }
+  { phase: ChunkHeader, }
 }
 
 ///|
@@ -256,58 +261,64 @@ fn ChunkedReader::read(
   self : ChunkedReader,
   buf : ReceiveBuffer,
 ) -> Event? raise ProtocolError {
-  if self.reading_trailer {
-    guard buf.maybe_extract_lines() is Some(lines) else { return None }
-    return Some(
-      EndOfMessage({
-        headers: normalize_and_validate(decode_header_lines(lines), parsed=true),
-      }),
-    )
+  for ;; {
+    match self.phase {
+      Trailer => {
+        guard buf.maybe_extract_lines() is Some(lines) else { return None }
+        return Some(
+          EndOfMessage({
+            headers: normalize_and_validate(
+              decode_header_lines(lines),
+              parsed=true,
+            ),
+          }),
+        )
+      }
+      ChunkFooter(expected) => {
+        guard buf.maybe_extract_at_most(expected.length().to_int64())
+          is Some(data) else {
+          return None
+        }
+        if data[:] != expected[:data.length()] {
+          raise local_error(
+            "malformed chunk footer: \{bytes_repr(data)} (expected \{bytes_repr(expected)})",
+          )
+        }
+        if data.length() < expected.length() {
+          self.phase = ChunkFooter(expected[data.length():].to_owned())
+          return None
+        }
+        // footer done; go on to the next chunk header
+        self.phase = ChunkHeader
+      }
+      ChunkHeader => {
+        guard buf.maybe_extract_next_line() is Some(chunk_header) else {
+          return None
+        }
+        guard match_chunk_header(chunk_header) is Some(size) else {
+          raise local_error("illegal chunk header: \{bytes_repr(chunk_header)}")
+        }
+        // XX FIXME: we discard chunk extensions. Does anyone care?
+        self.phase = if size == 0L {
+          Trailer
+        } else {
+          ChunkData(remaining=size, started=false)
+        }
+      }
+      ChunkData(remaining~, started~) => {
+        guard buf.maybe_extract_at_most(remaining) is Some(data) else {
+          return None
+        }
+        let left = remaining - data.length().to_int64()
+        self.phase = if left == 0L {
+          ChunkFooter(b"\r\n")
+        } else {
+          ChunkData(remaining=left, started=true)
+        }
+        return Some(
+          Data(Data::new(data, chunk_start=!started, chunk_end=left == 0L)),
+        )
+      }
+    }
   }
-  if !self.bytes_to_discard.is_empty() {
-    guard buf.maybe_extract_at_most(self.bytes_to_discard.length().to_int64())
-      is Some(data) else {
-      return None
-    }
-    if data[:] != self.bytes_to_discard[:data.length()] {
-      raise local_error(
-        "malformed chunk footer: \{bytes_repr(data)} (expected \{bytes_repr(self.bytes_to_discard)})",
-      )
-    }
-    self.bytes_to_discard = self.bytes_to_discard[data.length():].to_owned()
-    if !self.bytes_to_discard.is_empty() {
-      return None
-    }
-    // else, fall through and read some more
-  }
-  if self.bytes_in_chunk == 0L {
-    // We need to refill our chunk count
-    guard buf.maybe_extract_next_line() is Some(chunk_header) else {
-      return None
-    }
-    guard match_chunk_header(chunk_header) is Some(size) else {
-      raise local_error("illegal chunk header: \{bytes_repr(chunk_header)}")
-    }
-    // XX FIXME: we discard chunk extensions. Does anyone care?
-    self.bytes_in_chunk = size
-    if size == 0L {
-      self.reading_trailer = true
-      return self.read(buf)
-    }
-    self.chunk_start_pending = true
-  }
-  guard! self.bytes_in_chunk > 0L
-  guard buf.maybe_extract_at_most(self.bytes_in_chunk) is Some(data) else {
-    return None
-  }
-  self.bytes_in_chunk -= data.length().to_int64()
-  let chunk_start = self.chunk_start_pending
-  self.chunk_start_pending = false
-  let chunk_end = if self.bytes_in_chunk == 0L {
-    self.bytes_to_discard = b"\r\n"
-    true
-  } else {
-    false
-  }
-  Some(Data(Data::new(data, chunk_start~, chunk_end~)))
 }
