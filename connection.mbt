@@ -26,7 +26,9 @@ pub(all) enum NextEvent {
 ///|
 /// How a message body is framed.
 priv enum Framing {
-  ContentLength(Int64)
+  /// `declared` keeps the digits from the header: lengths beyond Int64 are
+  /// saturated, but error messages should still quote what the peer said.
+  ContentLength(Int64, declared~ : Bytes?)
   Chunked
   Http10
 }
@@ -61,7 +63,7 @@ fn body_framing(request_method : Bytes?, event : Event) -> Framing {
           resp.status_code >= 200 &&
           resp.status_code < 300
         ) {
-        return ContentLength(0L)
+        return ContentLength(0L, declared=None)
       }
       // Section 3.3.3 also lists another case -- responses with status_code
       // < 200. For us these are InformationalResponses, not Responses, so
@@ -82,11 +84,11 @@ fn body_framing(request_method : Bytes?, event : Event) -> Framing {
   let content_lengths = get_comma_header(headers, b"content-length")
   if !content_lengths.is_empty() {
     guard! parse_decimal(content_lengths[0]) is Some(n)
-    return ContentLength(n)
+    return ContentLength(n, declared=Some(content_lengths[0]))
   }
   // Step 4: no applicable headers; fallback/default depends on type
   match event {
-    Request(_) => ContentLength(0L)
+    Request(_) => ContentLength(0L, declared=None)
     _ => Http10
   }
 }

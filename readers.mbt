@@ -11,6 +11,8 @@
 ///|
 priv struct ContentLengthReader {
   length : Int64
+  /// The Content-Length as written by the peer, for error messages.
+  declared : String
   mut remaining : Int64
 }
 
@@ -48,7 +50,13 @@ fn reader_for_state(role : Role, state : State) -> Reader? {
 /// READERS[SEND_BODY][framing](*args)
 fn reader_for_framing(framing : Framing) -> Reader {
   match framing {
-    ContentLength(length) => ContentLength({ length, remaining: length, })
+    ContentLength(length, declared~) => {
+      let declared = match declared {
+        Some(d) => @utf8.decode_lossy(d)
+        None => length.to_string()
+      }
+      ContentLength({ length, declared, remaining: length, })
+    }
     Chunked => Chunked(ChunkedReader::new())
     Http10 => Http10
   }
@@ -91,7 +99,7 @@ fn Reader::read_eof(self : Reader) -> Event? raise ProtocolError {
     ContentLength(r) =>
       raise RemoteProtocolError(
         "peer closed connection without sending complete message body " +
-        "(received \{r.length - r.remaining} bytes, expected \{r.length})",
+        "(received \{r.length - r.remaining} bytes, expected \{r.declared})",
         error_status_hint=400,
       )
     Chunked(_) =>

@@ -30,7 +30,7 @@ fn writer_for_state(role : Role, state : State) -> Writer? {
 /// WRITERS[SEND_BODY][framing](*args)
 fn writer_for_framing(framing : Framing) -> Writer {
   match framing {
-    ContentLength(length) => ContentLength({ length, })
+    ContentLength(length, ..) => ContentLength({ length, })
     Chunked => Chunked
     Http10 => Http10
   }

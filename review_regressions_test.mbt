@@ -60,3 +60,19 @@ test "Headers::get is safe out of range" {
   assert_eq(h.get(1), None)
   assert_eq(h.get(-1), None)
 }
+
+///|
+test "EOF error quotes the declared Content-Length even beyond Int64" {
+  // Found by differential fuzzing against Python h11.
+  let c = @h11.Connection::new(Server)
+  c.receive_data(
+    b"PUT / HTTP/1.0\r\nContent-Length: 99999999999999999999\r\n\r\n",
+  )
+  ignore(c.next_event())
+  c.receive_data(b"")
+  let e = expect_remote_error(() => ignore(c.next_event()))
+  inspect(
+    e.message(),
+    content="peer closed connection without sending complete message body (received 0 bytes, expected 99999999999999999999)",
+  )
+}

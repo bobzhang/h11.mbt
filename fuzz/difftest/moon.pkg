@@ -1,0 +1,11 @@
+import {
+  "bobzhang/h11",
+  "moonbitlang/x/fs",
+  "moonbitlang/core/env",
+}
+
+supported_targets = "native"
+
+options(
+  "is-main": true,
+)

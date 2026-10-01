@@ -85,7 +85,7 @@ test "_body_framing" {
         (b"GET", framing_resp(status_code=304, cl?, te~)),
       ] {
       let (meth, r) = case
-      assert_true(body_framing(Some(meth), r) is ContentLength(0L))
+      assert_true(body_framing(Some(meth), r) is ContentLength(0L, ..))
     }
   }
   // Transfer-encoding
@@ -95,11 +95,13 @@ test "_body_framing" {
     assert_true(body_framing(Some(b"GET"), framing_resp(cl?, te~)) is Chunked)
   }
   // Content-Length
-  assert_true(body_framing(None, framing_req(cl=100)) is ContentLength(100L))
   assert_true(
-    body_framing(Some(b"GET"), framing_resp(cl=100)) is ContentLength(100L),
+    body_framing(None, framing_req(cl=100)) is ContentLength(100L, ..),
+  )
+  assert_true(
+    body_framing(Some(b"GET"), framing_resp(cl=100)) is ContentLength(100L, ..),
   )
   // No headers
-  assert_true(body_framing(None, framing_req()) is ContentLength(0L))
+  assert_true(body_framing(None, framing_req()) is ContentLength(0L, ..))
   assert_true(body_framing(Some(b"GET"), framing_resp()) is Http10)
 }

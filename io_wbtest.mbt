@@ -546,12 +546,12 @@ fn http10_reader() -> Reader {
 ///|
 test "ContentLengthReader" {
   t_body_reader(
-    () => reader_for_framing(ContentLength(0L)),
+    () => reader_for_framing(ContentLength(0L, declared=None)),
     b"",
     Events([eom()]),
   )
   t_body_reader(
-    () => reader_for_framing(ContentLength(10L)),
+    () => reader_for_framing(ContentLength(10L, declared=None)),
     b"0123456789",
     Events([data_event(b"0123456789"), eom()]),
   )
@@ -650,19 +650,19 @@ test "ChunkedReader" {
 
 ///|
 test "ContentLengthWriter" {
-  let w = writer_fn(writer_for_framing(ContentLength(5L)))
+  let w = writer_fn(writer_for_framing(ContentLength(5L, declared=None)))
   assert_eq(dowrite(w, data_event(b"123")), b"123")
   assert_eq(dowrite(w, data_event(b"45")), b"45")
   assert_eq(dowrite(w, eom()), b"")
-  let w = writer_fn(writer_for_framing(ContentLength(5L)))
+  let w = writer_fn(writer_for_framing(ContentLength(5L, declared=None)))
   expect_local_error(() => dowrite(w, data_event(b"123456")) |> ignore)
-  let w = writer_fn(writer_for_framing(ContentLength(5L)))
+  let w = writer_fn(writer_for_framing(ContentLength(5L, declared=None)))
   dowrite(w, data_event(b"123")) |> ignore
   expect_local_error(() => dowrite(w, data_event(b"456")) |> ignore)
-  let w = writer_fn(writer_for_framing(ContentLength(5L)))
+  let w = writer_fn(writer_for_framing(ContentLength(5L, declared=None)))
   dowrite(w, data_event(b"123")) |> ignore
   expect_local_error(() => dowrite(w, eom()) |> ignore)
-  let w = writer_fn(writer_for_framing(ContentLength(5L)))
+  let w = writer_fn(writer_for_framing(ContentLength(5L, declared=None)))
   assert_eq(dowrite(w, data_event(b"123")), b"123")
   assert_eq(dowrite(w, data_event(b"45")), b"45")
   expect_local_error(() => {
