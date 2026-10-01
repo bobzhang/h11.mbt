@@ -13,3 +13,7 @@ import {
   "moonbitlang/core/buffer",
   "moonbitlang/core/encoding/utf8",
 } for "test"
+
+import {
+  "moonbitlang/core/buffer",
+} for "wbtest"
