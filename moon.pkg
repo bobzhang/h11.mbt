@@ -8,3 +8,8 @@ import {
 // 35: `method` is a reserved word, but it is the natural field name here
 
 warnings = "-79-35"
+
+import {
+  "moonbitlang/core/buffer",
+  "moonbitlang/core/encoding/utf8",
+} for "test"
