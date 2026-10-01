@@ -41,7 +41,12 @@ test "events" {
   ignore(
     expect_local_error(() => {
       ignore(
-        req(b"GET", b"/", [(b"Host", b"a"), (b"Host", b"a")], http_version=b"1.0"),
+        req(
+          b"GET",
+          b"/",
+          [(b"Host", b"a"), (b"Host", b"a")],
+          http_version=b"1.0",
+        ),
       )
     }),
   )
@@ -77,9 +82,7 @@ test "events" {
   for bad_byte in [b'\x00', b'\x20', b'\x7f', b'\xee'] {
     let target = b"/" + Bytes::make(1, bad_byte)
     ignore(
-      expect_local_error(() => {
-        ignore(req(b"GET", target, [(b"Host", b"a")]))
-      }),
+      expect_local_error(() => ignore(req(b"GET", target, [(b"Host", b"a")]))),
     )
   }
 
@@ -89,10 +92,9 @@ test "events" {
       ignore(req(b"GET / HTTP/1.1", b"/", [(b"Host", b"a")]))
     }),
   )
-  let ir = @h11.InformationalResponse::new(
-    status_code=100,
-    headers=[(b"Host", b"a")],
-  )
+  let ir = @h11.InformationalResponse::new(status_code=100, headers=[
+    (b"Host", b"a"),
+  ])
   assert_eq(ir.status_code, 100)
   assert_eq(ir.headers.to_array(), [(b"host", b"a")])
   assert_eq(ir.http_version, b"1.1")
@@ -101,18 +103,19 @@ test "events" {
   assert_eq(r.status_code, 204)
   assert_eq(r.headers.to_array(), [])
   assert_eq(r.http_version, b"1.0")
-  ignore(
-    expect_local_error(() => ignore(resp(100, [], http_version=b"1.0"))),
-  )
+  ignore(expect_local_error(() => ignore(resp(100, [], http_version=b"1.0"))))
   // (Python also checks that a non-int status_code is rejected; the MoonBit
   // type system makes that impossible.)
   let d = @h11.Data::new(b"asdf")
   assert_eq(d.data, b"asdf")
   let e = @h11.EndOfMessage::new()
   assert_true(e.headers.is_empty())
-  debug_inspect(@h11.Event::ConnectionClosed, content=(
-    #|ConnectionClosed
-  ))
+  debug_inspect(
+    @h11.Event::ConnectionClosed,
+    content=(
+      #|ConnectionClosed
+    ),
+  )
 }
 
 ///|
@@ -150,19 +153,25 @@ test "event debug output" {
       #|)
     ),
   )
-  debug_inspect(resp(200, [], reason=b"OK"), content=(
-    #|Response(
-    #|  Response(
-    #|    status_code=200,
-    #|    headers=[],
-    #|    http_version=b'1.1',
-    #|    reason=b'OK',
-    #|  ),
-    #|)
-  ))
-  debug_inspect(data(b"\x00\r\n", chunk_start=true), content=(
-    #|Data(Data(data=b'\x00\r\n', chunk_start=true, chunk_end=false))
-  ))
+  debug_inspect(
+    resp(200, [], reason=b"OK"),
+    content=(
+      #|Response(
+      #|  Response(
+      #|    status_code=200,
+      #|    headers=[],
+      #|    http_version=b'1.1',
+      #|    reason=b'OK',
+      #|  ),
+      #|)
+    ),
+  )
+  debug_inspect(
+    data(b"\x00\r\n", chunk_start=true),
+    content=(
+      #|Data(Data(data=b'\x00\r\n', chunk_start=true, chunk_end=false))
+    ),
+  )
 }
 
 // --- test_util.py ---
@@ -181,9 +190,12 @@ test "LocalProtocolError" {
     error_status_hint=418,
   )
   assert_eq(e.error_status_hint(), 418)
-  inspect(e, content=(
-    #|LocalProtocolError("foo", error_status_hint=418)
-  ))
+  inspect(
+    e,
+    content=(
+      #|LocalProtocolError("foo", error_status_hint=418)
+    ),
+  )
 }
 
 ///|
@@ -191,11 +203,16 @@ test "local errors are reraised as remote errors with the same hint" {
   // Python's test_LocalProtocolError checks _reraise_as_remote_protocol_error;
   // in MoonBit that conversion happens inside Connection::next_event.
   let c = @h11.Connection::new(Server)
-  c.receive_data(b"GET / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: gzip\r\n\r\n")
+  c.receive_data(
+    b"GET / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: gzip\r\n\r\n",
+  )
   let e = expect_remote_error(() => ignore(c.next_event()))
   assert_true(e.is_remote())
   assert_eq(e.error_status_hint(), 501)
-  inspect(e.message(), content=(
-    #|Only Transfer-Encoding: chunked is supported
-  ))
+  inspect(
+    e.message(),
+    content=(
+      #|Only Transfer-Encoding: chunked is supported
+    ),
+  )
 }

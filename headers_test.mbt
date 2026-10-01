@@ -96,9 +96,7 @@ test "get/set comma header" {
     (b"newthing", b"a"),
     (b"newthing", b"b"),
   ])
-  let headers = @h11.set_comma_header(headers, b"whatever", [
-    b"different thing",
-  ])
+  let headers = @h11.set_comma_header(headers, b"whatever", [b"different thing"])
   assert_eq(headers.to_array(), [
     (b"connection", b"close"),
     (b"connection", b"fOo,, , BAR"),
@@ -121,7 +119,9 @@ test "has_100_continue" {
       r([(b"Host", b"example.com"), (b"Expect", b"100-continue")], b"1.1"),
     ),
   )
-  assert_true(!@h11.has_expect_100_continue(r([(b"Host", b"example.com")], b"1.1")))
+  assert_true(
+    !@h11.has_expect_100_continue(r([(b"Host", b"example.com")], b"1.1")),
+  )
   // Case insensitive
   assert_true(
     @h11.has_expect_100_continue(
@@ -131,10 +131,7 @@ test "has_100_continue" {
   // Doesn't work in HTTP/1.0
   assert_true(
     !@h11.has_expect_100_continue(
-      r(
-        [(b"Host", b"example.com"), (b"Expect", b"100-continue")],
-        b"1.0",
-      ),
+      r([(b"Host", b"example.com"), (b"Expect", b"100-continue")], b"1.0"),
     ),
   )
 }
@@ -145,7 +142,10 @@ test "headers equality ignores raw casing" {
   let b = @h11.Headers::new([(b"host", b"a")])
   assert_eq(a, b)
   assert_true(a.raw_items() != b.raw_items())
-  debug_inspect(a, content=(
-    #|[(b'host', b'a')]
-  ))
+  debug_inspect(
+    a,
+    content=(
+      #|[(b'host', b'a')]
+    ),
+  )
 }
