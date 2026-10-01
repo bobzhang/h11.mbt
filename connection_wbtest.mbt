@@ -7,7 +7,7 @@ fn keep_alive_req(
   headers : Array[(Bytes, Bytes)],
   http_version? : Bytes = b"1.1",
 ) -> Bool raise {
-  let r = Request::new(method=b"GET", target=b"/", headers~, http_version~)
+  let r = Request::new(method_=b"GET", target=b"/", headers~, http_version~)
   keep_alive(r.headers, r.http_version)
 }
 
@@ -64,7 +64,7 @@ fn framing_resp(
 fn framing_req(cl? : Int, te? : Bool = false) -> Event raise {
   let h = framing_headers(cl, te)
   h.push((b"Host", b"example.com"))
-  Request(Request::new(method=b"GET", target=b"/", headers=h))
+  Request(Request::new(method_=b"GET", target=b"/", headers=h))
 }
 
 ///|

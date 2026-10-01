@@ -111,7 +111,7 @@ test "get/set comma header" {
 ///|
 test "has_100_continue" {
   fn r(headers : Array[(Bytes, Bytes)], http_version : Bytes) raise {
-    @h11.Request::new(method=b"GET", target=b"/", headers~, http_version~)
+    @h11.Request::new(method_=b"GET", target=b"/", headers~, http_version~)
   }
 
   assert_true(

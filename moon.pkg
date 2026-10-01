@@ -6,9 +6,8 @@ import {
 }
 
 // 79: implicit promotion of trait methods (noisy for derived traits)
-// 35: `method` is a reserved word, but it is the natural field name here
 
-warnings = "-79-35"
+warnings = "-79"
 
 import {
   "moonbitlang/core/buffer",

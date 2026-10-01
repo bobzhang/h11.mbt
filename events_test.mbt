@@ -10,20 +10,20 @@ test "events" {
   )
   // But this is okay (HTTP/1.0)
   let r = @h11.Request::new(
-    method=b"GET",
+    method_=b"GET",
     target=b"/",
     headers=[(b"a", b"b")],
     http_version=b"1.0",
   )
   // fields are normalized
-  assert_eq(r.method, b"GET")
+  assert_eq(r.method_, b"GET")
   assert_eq(r.target, b"/")
   assert_eq(r.headers.to_array(), [(b"a", b"b")])
   assert_eq(r.http_version, b"1.0")
 
   // This is also okay -- has a Host (with weird capitalization, which is ok)
   let r = @h11.Request::new(
-    method=b"GET",
+    method_=b"GET",
     target=b"/",
     headers=[(b"a", b"b"), (b"hOSt", b"example.com")],
     http_version=b"1.1",
@@ -121,7 +121,7 @@ test "events" {
 ///|
 test "header casing" {
   let r = @h11.Request::new(
-    method=b"GET",
+    method_=b"GET",
     target=b"/",
     headers=[(b"Host", b"example.org"), (b"Connection", b"keep-alive")],
     http_version=b"1.1",
@@ -145,7 +145,7 @@ test "event debug output" {
     content=(
       #|Request(
       #|  Request(
-      #|    method=b'GET',
+      #|    method_=b'GET',
       #|    target=b'/',
       #|    headers=[(b'host', b'example.org'), (b'x-thing', b"it's")],
       #|    http_version=b'1.1',

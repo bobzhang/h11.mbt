@@ -905,12 +905,12 @@ test "early detection of invalid response" {
 
 ///|
 fn setup_head_framing(
-  method : Bytes,
+  meth : Bytes,
   http_version : Bytes,
 ) -> @h11.Connection raise {
   let c = @h11.Connection::new(Server)
   c.receive_data(
-    method + b" / HTTP/" + http_version + b"\r\n" + b"Host: example.com\r\n\r\n",
+    meth + b" / HTTP/" + http_version + b"\r\n" + b"Host: example.com\r\n\r\n",
   )
   assert_true(c.next_event() is Event(Request(_)))
   assert_true(c.next_event() is Event(EndOfMessage(_)))
@@ -923,21 +923,21 @@ fn setup_head_framing(
 /// put if it were a GET -- even though we know that for HEAD, those headers
 /// will be ignored.
 test "HEAD framing headers" {
-  for method in [b"GET", b"HEAD"] {
+  for meth in [b"GET", b"HEAD"] {
     // No Content-Length, HTTP/1.1 peer, should use chunked
-    let c = setup_head_framing(method, b"1.1")
+    let c = setup_head_framing(meth, b"1.1")
     assert_eq(
       c.send(resp(200, [])),
       Some(b"HTTP/1.1 200 \r\n" + b"Transfer-Encoding: chunked\r\n\r\n"),
     )
     // No Content-Length, HTTP/1.0 peer, frame with connection: close
-    let c = setup_head_framing(method, b"1.0")
+    let c = setup_head_framing(meth, b"1.0")
     assert_eq(
       c.send(resp(200, [])),
       Some(b"HTTP/1.1 200 \r\n" + b"Connection: close\r\n\r\n"),
     )
     // Content-Length + Transfer-Encoding, TE wins
-    let c = setup_head_framing(method, b"1.1")
+    let c = setup_head_framing(meth, b"1.1")
     assert_eq(
       c.send(
         resp(200, [

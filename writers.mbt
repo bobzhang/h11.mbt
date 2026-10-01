@@ -65,7 +65,7 @@ fn write_request(
     raise local_error("I only send HTTP/1.1")
   }
   out.push(
-    bytes_concat([request.method, b" ", request.target, b" HTTP/1.1\r\n"]),
+    bytes_concat([request.method_, b" ", request.target, b" HTTP/1.1\r\n"]),
   )
   write_headers(request.headers, out)
 }

@@ -106,12 +106,12 @@ pub(all) enum NextEvent {
 } derive(Eq, @debug.Debug)
 
 pub struct Request {
-  method : Bytes
+  method_ : Bytes
   target : Bytes
   headers : Headers
   http_version : Bytes
 } derive(Eq)
-pub fn Request::new(method~ : Bytes, target~ : Bytes, headers~ : ArrayView[(Bytes, Bytes)], http_version? : Bytes) -> Self raise ProtocolError
+pub fn Request::new(method_~ : Bytes, target~ : Bytes, headers~ : ArrayView[(Bytes, Bytes)], http_version? : Bytes) -> Self raise ProtocolError
 pub impl @debug.Debug for Request
 
 pub struct Response {

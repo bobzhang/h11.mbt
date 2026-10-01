@@ -10,7 +10,7 @@
 /// - `headers`: request headers, see `Headers`.
 /// - `http_version`: the protocol version, e.g. `b"1.1"`.
 pub struct Request {
-  method : Bytes
+  method_ : Bytes
   target : Bytes
   headers : Headers
   http_version : Bytes
@@ -25,20 +25,20 @@ pub struct Request {
 ///
 /// ```mbt check
 /// test {
-///   let req = @h11.Request::new(method=b"GET", target=b"/", headers=[
+///   let req = @h11.Request::new(method_=b"GET", target=b"/", headers=[
 ///     (b"Host", b"example.com"),
 ///   ])
 ///   inspect(req.headers.length(), content="1")
 /// }
 /// ```
 pub fn Request::new(
-  method~ : Bytes,
+  method_~ : Bytes,
   target~ : Bytes,
   headers~ : ArrayView[(Bytes, Bytes)],
   http_version? : Bytes = b"1.1",
 ) -> Request raise ProtocolError {
   Request::make(
-    method,
+    method_,
     target,
     normalize_and_validate(headers, parsed=false),
     http_version,
@@ -47,7 +47,7 @@ pub fn Request::new(
 
 ///|
 fn Request::make(
-  method : Bytes,
+  method_ : Bytes,
   target : Bytes,
   headers : Headers,
   http_version : Bytes,
@@ -69,19 +69,19 @@ fn Request::make(
   if host_count > 1 {
     raise local_error("Found multiple Host: headers")
   }
-  if !match_token(method) {
+  if !match_token(method_) {
     raise local_error("Illegal method characters")
   }
   if target.is_empty() || !target.iter().all(is_vchar) {
     raise local_error("Illegal target characters")
   }
-  { method, target, headers, http_version, }
+  { method_, target, headers, http_version, }
 }
 
 ///|
 pub impl Debug for Request with fn to_repr(self) {
   Repr::ctor("Request", [
-    (Some("method"), bytes_debug(self.method)),
+    (Some("method_"), bytes_debug(self.method_)),
     (Some("target"), bytes_debug(self.target)),
     (Some("headers"), Repr(self.headers)),
     (Some("http_version"), bytes_debug(self.http_version)),

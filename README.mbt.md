@@ -22,7 +22,7 @@ test "client and server" {
   let server = @h11.Connection::new(Server)
 
   // The client sends a request...
-  let request = @h11.Request::new(method=b"GET", target=b"/", headers=[
+  let request = @h11.Request::new(method_=b"GET", target=b"/", headers=[
     (b"Host", b"example.com"),
   ])
   let wire = client.send(Request(request)).unwrap()
@@ -81,7 +81,7 @@ test "client and server" {
 | `conn.their_http_version` | `conn.their_http_version()` |
 | `conn.trailing_data` | `conn.trailing_data()` |
 | `conn.client_is_waiting_for_100_continue` | `conn.client_is_waiting_for_100_continue()` |
-| `h11.Request(method=..., target=..., headers=[...])` | `@h11.Request::new(method=..., target=..., headers=[...])` |
+| `h11.Request(method_=..., target=..., headers=[...])` | `@h11.Request::new(method_=..., target=..., headers=[...])` |
 | `h11.Response`, `h11.InformationalResponse` | `@h11.Response::new(...)`, `@h11.InformationalResponse::new(...)` |
 | `h11.Data(data=...)`, `h11.EndOfMessage(headers=...)` | `@h11.Data::new(...)`, `@h11.EndOfMessage::new(headers=...)` |
 | `h11.ConnectionClosed()` | `ConnectionClosed` |

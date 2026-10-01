@@ -41,7 +41,7 @@ fn simple_cases() -> Array[(Role, State, Event, Bytes)] raise {
       Client,
       Idle,
       Event::Request(
-        Request::new(method=b"GET", target=b"/a", headers=[
+        Request::new(method_=b"GET", target=b"/a", headers=[
           (b"Host", b"foo"),
           (b"Connection", b"close"),
         ]),
@@ -199,7 +199,7 @@ test "writers_unusual" {
     dowrite(
       (request, out) => write_request(request, out),
       Request::new(
-        method=b"GET",
+        method_=b"GET",
         target=b"/",
         headers=[(b"Host", b"foo"), (b"Connection", b"close")],
         http_version=b"1.0",
@@ -229,7 +229,7 @@ test "readers_unusual" {
     Some(
       Event::Request(
         Request::new(
-          method=b"HEAD",
+          method_=b"HEAD",
           target=b"/foo",
           headers=[(b"Some", b"header")],
           http_version=b"1.0",
@@ -245,7 +245,7 @@ test "readers_unusual" {
     Some(
       Event::Request(
         Request::new(
-          method=b"HEAD",
+          method_=b"HEAD",
           target=b"/foo",
           headers=[],
           http_version=b"1.0",
@@ -394,7 +394,7 @@ test "readers_unusual" {
     b"    last header  \r\n\r\n",
     Some(
       Event::Request(
-        Request::new(method=b"HEAD", target=b"/foo", headers=[
+        Request::new(method_=b"HEAD", target=b"/foo", headers=[
           (b"Host", b"example.com"),
           (b"Some", b"multi-line header nonsense I guess"),
           (b"Connection", b"close"),
@@ -746,7 +746,7 @@ test "allow_some_garbage_in_cookies" {
     b"\r\n",
     Some(
       Event::Request(
-        Request::new(method=b"HEAD", target=b"/foo", headers=[
+        Request::new(method_=b"HEAD", target=b"/foo", headers=[
           (b"Host", b"foo"),
           (b"Set-Cookie", b"___utmvafIumyLc=kUd\x01UpAt; path=/; Max-Age=900"),
         ]),

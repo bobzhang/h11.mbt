@@ -248,7 +248,7 @@ fn Connection::process_event(
   // succeeds.
   let old_states = self.cstate.states
   if role is Client && event is Request(req) {
-    if req.method == b"CONNECT" {
+    if req.method_ == b"CONNECT" {
       self.cstate.process_client_switch_proposal(SwitchConnect)
     }
     if !get_comma_header(req.headers, b"upgrade").is_empty() {
@@ -263,7 +263,7 @@ fn Connection::process_event(
   self.cstate.process_event(role, event.event_type(), server_switch_event?)
   // Then perform the updates triggered by it.
   if event is Request(req) {
-    self.request_method = Some(req.method)
+    self.request_method = Some(req.method_)
   }
   if role == self.their_role {
     match event {

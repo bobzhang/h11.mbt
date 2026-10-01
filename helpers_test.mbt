@@ -107,7 +107,7 @@ fn req(
   headers : Array[(Bytes, Bytes)],
   http_version? : Bytes = b"1.1",
 ) -> @h11.Event raise {
-  Request(@h11.Request::new(method=meth, target~, headers~, http_version~))
+  Request(@h11.Request::new(method_=meth, target~, headers~, http_version~))
 }
 
 ///|
