@@ -100,9 +100,9 @@ methods, targets, and versions are `Bytes`.
 - `Data.data` is always `Bytes` (Python allows arbitrary objects for
   `sendfile`-style passthrough). `send_with_data_passthrough` still
   guarantees the exact `Bytes` you passed appear in the returned list.
-- `Content-Length` values and chunk sizes are stored as `Int64`; values that
-  would overflow it (more than ~9.2 exabytes) are rejected as malformed
-  instead of being accepted as Python big integers.
+- `Content-Length` values and chunk sizes are tracked as `Int64`. The same
+  inputs as Python are accepted (up to 20 digits); values beyond 2^63 - 1
+  saturate, which is unobservable in practice.
 - `receive_data` after EOF raises `RuntimeError` (a MoonBit `suberror`).
 - Python's `ValueError` for an invalid role and `TypeError`s for wrongly
   typed arguments are impossible in MoonBit and have no counterpart.

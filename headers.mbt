@@ -53,6 +53,16 @@ pub fn Headers::at(self : Headers, idx : Int) -> (Bytes, Bytes) {
 }
 
 ///|
+/// The `idx`-th header as a `(lowercased_name, value)` pair, or `None` if
+/// `idx` is out of range.
+pub fn Headers::get(self : Headers, idx : Int) -> (Bytes, Bytes)? {
+  match self.full_items.get(idx) {
+    Some((_, name, value)) => Some((name, value))
+    None => None
+  }
+}
+
+///|
 /// Iterate over `(lowercased_name, value)` pairs.
 pub fn Headers::iter(self : Headers) -> Iter[(Bytes, Bytes)] {
   self.full_items.iter().map(item => (item.1, item.2))
@@ -121,26 +131,20 @@ fn normalize_and_validate(
     }
     let name = ascii_lower(raw_name)
     if name == b"content-length" {
-      let lengths : Array[Bytes] = []
+      let lengths : Map[Bytes, Unit] = Map([])
       for length in split_on(value, b',') {
-        let length = ascii_strip(length).to_owned()
-        if !lengths.contains(length) {
-          lengths.push(length)
-        }
+        lengths[ascii_strip(length).to_owned()] = ()
       }
       if lengths.length() != 1 {
         raise local_error("conflicting Content-Length headers")
       }
-      let value = lengths[0]
+      guard lengths.keys().head() is Some(value) else {
+        raise local_error("conflicting Content-Length headers")
+      }
       if value.is_empty() || !value.iter().all(is_digit) {
         raise local_error("bad Content-Length")
       }
       if value.length() > content_length_max_digits {
-        raise local_error("bad Content-Length")
-      }
-      // Deviation from Python: lengths are stored in an Int64, so values
-      // that would overflow it are rejected here.
-      if parse_decimal(value) is None {
         raise local_error("bad Content-Length")
       }
       match seen_content_length {

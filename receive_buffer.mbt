@@ -56,18 +56,24 @@ fn ReceiveBuffer::at(self : ReceiveBuffer, i : Int) -> Byte {
 fn ReceiveBuffer::append(self : ReceiveBuffer, bytes : BytesView) -> Unit {
   let len = self.length()
   let needed = len + bytes.length()
+  if needed < 0 {
+    abort("receive buffer size overflow")
+  }
   if self.end + bytes.length() > self.data.length() {
-    if needed <= self.data.length() / 2 + 1 && self.start > 0 {
-      // plenty of room: just compact in place
+    if needed <= self.data.length() / 2 {
+      // At least half the storage is free after compaction, so the bytes
+      // moved here are paid for by the bytes consumed since the last
+      // compaction: amortized O(1) per byte.
       self.data.blit_to(self.data, len~, src_offset=self.start, dst_offset=0)
     } else {
-      let mut cap = if self.data.length() < 64 {
+      // Grow geometrically (relative to what we need, not to the current
+      // capacity) so that repeated refills don't copy everything each time.
+      let cap = if needed < 32 {
         64
+      } else if needed <= @int.MAX_VALUE / 2 {
+        needed * 2
       } else {
-        self.data.length()
-      }
-      while cap < needed {
-        cap *= 2
+        needed
       }
       let new_data = FixedArray::make(cap, (0 : Byte))
       self.data.blit_to(new_data, len~, src_offset=self.start, dst_offset=0)

@@ -112,40 +112,39 @@ fn bytes_concat(parts : Array[Bytes]) -> Bytes {
 }
 
 ///|
-/// Parse a non-empty run of decimal digits. Returns `None` on an empty input,
-/// a non-digit byte, or overflow of `Int64`.
-fn parse_decimal(s : BytesView) -> Int64? {
+/// Parse a non-empty run of digits in `radix` (10 or 16). Returns `None` on
+/// an empty input or an invalid digit. Values that do not fit in an `Int64`
+/// saturate at `Int64` max: Python accepts arbitrarily large integers here,
+/// and no real stream can ever get close to 2^63 bytes, so saturating keeps
+/// the observable behavior identical.
+fn parse_digits(s : BytesView, radix~ : Int) -> Int64? {
   if s.is_empty() {
     return None
   }
+  let r = radix.to_int64()
   let mut acc = 0L
   for b in s {
-    guard is_digit(b) else { return None }
-    let d = (b - b'0').to_int64()
-    if acc > (@int64.MAX_VALUE - d) / 10L {
-      return None
+    let d = match hex_value(b) {
+      Some(d) if d < radix => d.to_int64()
+      _ => return None
     }
-    acc = acc * 10L + d
+    acc = if acc > (@int64.MAX_VALUE - d) / r {
+      @int64.MAX_VALUE
+    } else {
+      acc * r + d
+    }
   }
   Some(acc)
 }
 
 ///|
-/// Parse a non-empty run of hex digits. Returns `None` on an empty input,
-/// a non-hex byte, or overflow of `Int64`.
+fn parse_decimal(s : BytesView) -> Int64? {
+  parse_digits(s, radix=10)
+}
+
+///|
 fn parse_hex(s : BytesView) -> Int64? {
-  if s.is_empty() {
-    return None
-  }
-  let mut acc = 0L
-  for b in s {
-    guard hex_value(b) is Some(d) else { return None }
-    if acc > (@int64.MAX_VALUE - d.to_int64()) / 16L {
-      return None
-    }
-    acc = acc * 16L + d.to_int64()
-  }
-  Some(acc)
+  parse_digits(s, radix=16)
 }
 
 ///|

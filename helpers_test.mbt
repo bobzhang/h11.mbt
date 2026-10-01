@@ -29,26 +29,6 @@ fn receive_and_get(
 }
 
 ///|
-/// Merges adjacent Data events and removes chunk boundaries.
-fn normalize_data_events(in_events : Array[@h11.Event]) -> Array[@h11.Event] {
-  let out_events : Array[@h11.Event] = []
-  for event in in_events {
-    let event = match event {
-      Data(d) => @h11.Event::Data(@h11.Data::new(d.data))
-      e => e
-    }
-    match (out_events.last(), event) {
-      (Some(Data(prev)), Data(d)) =>
-        out_events[out_events.length() - 1] = Data(
-          @h11.Data::new(prev.data + d.data),
-        )
-      _ => out_events.push(event)
-    }
-  }
-  out_events
-}
-
-///|
 /// Two connections with a fake network link in between.
 struct ConnectionPair {
   client : @h11.Connection

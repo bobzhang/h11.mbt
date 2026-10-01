@@ -595,15 +595,13 @@ fn Connection::clean_up_response_headers_for_sending(
   }
   if !self.cstate.keep_alive || need_close {
     // Make sure Connection: close is set
-    let connection : Array[Bytes] = []
+    let connection_set : Map[Bytes, Unit] = Map([])
     for v in get_comma_header(headers, b"connection") {
-      if v != b"keep-alive" && !connection.contains(v) {
-        connection.push(v)
-      }
+      connection_set[v] = ()
     }
-    if !connection.contains(b"close") {
-      connection.push(b"close")
-    }
+    connection_set.remove(b"keep-alive")
+    connection_set[b"close"] = ()
+    let connection = connection_set.keys().to_array()
     connection.sort_by((a, b) => a.lexical_compare(b))
     headers = set_comma_header(headers, b"connection", connection)
   }

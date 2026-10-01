@@ -1,0 +1,156 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "bobzhang/h11"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub const DEFAULT_MAX_INCOMPLETE_EVENT_SIZE : Int = 16384
+
+pub fn get_comma_header(Headers, Bytes) -> Array[Bytes]
+
+pub fn has_expect_100_continue(Request) -> Bool
+
+pub fn set_comma_header(Headers, Bytes, ArrayView[Bytes]) -> Headers raise ProtocolError
+
+// Errors
+pub(all) suberror ProtocolError {
+  LocalProtocolError(String, error_status_hint~ : Int)
+  RemoteProtocolError(String, error_status_hint~ : Int)
+}
+pub fn ProtocolError::error_status_hint(Self) -> Int
+pub fn ProtocolError::is_local(Self) -> Bool
+pub fn ProtocolError::is_remote(Self) -> Bool
+pub fn ProtocolError::message(Self) -> String
+pub impl Show for ProtocolError
+
+pub(all) suberror RuntimeError {
+  RuntimeError(String)
+}
+pub impl Show for RuntimeError
+
+// Types and methods
+pub struct Connection {
+  // private fields
+}
+pub fn Connection::client_is_waiting_for_100_continue(Self) -> Bool
+pub fn Connection::new(Role, max_incomplete_event_size? : Int) -> Self
+pub fn Connection::next_event(Self) -> NextEvent raise ProtocolError
+pub fn Connection::our_role(Self) -> Role
+pub fn Connection::our_state(Self) -> State
+pub fn Connection::receive_data(Self, BytesView) -> Unit raise RuntimeError
+pub fn Connection::send(Self, Event) -> Bytes? raise ProtocolError
+pub fn Connection::send_failed(Self) -> Unit
+pub fn Connection::send_with_data_passthrough(Self, Event) -> Array[Bytes]? raise ProtocolError
+pub fn Connection::start_next_cycle(Self) -> Unit raise ProtocolError
+pub fn Connection::states(Self) -> States
+pub fn Connection::their_http_version(Self) -> Bytes?
+pub fn Connection::their_role(Self) -> Role
+pub fn Connection::their_state(Self) -> State
+pub fn Connection::they_are_waiting_for_100_continue(Self) -> Bool
+pub fn Connection::trailing_data(Self) -> (Bytes, Bool)
+
+pub struct Data {
+  data : Bytes
+  chunk_start : Bool
+  chunk_end : Bool
+} derive(Eq)
+pub fn Data::new(Bytes, chunk_start? : Bool, chunk_end? : Bool) -> Self
+pub impl @debug.Debug for Data
+
+pub struct EndOfMessage {
+  headers : Headers
+} derive(Eq)
+pub fn EndOfMessage::new(headers? : ArrayView[(Bytes, Bytes)]) -> Self raise ProtocolError
+pub impl @debug.Debug for EndOfMessage
+
+pub(all) enum Event {
+  Request(Request)
+  InformationalResponse(InformationalResponse)
+  Response(Response)
+  Data(Data)
+  EndOfMessage(EndOfMessage)
+  ConnectionClosed
+} derive(Eq, @debug.Debug)
+
+pub struct Headers {
+  // private fields
+}
+#alias("_[_]")
+pub fn Headers::at(Self, Int) -> (Bytes, Bytes)
+pub fn Headers::empty() -> Self
+pub fn Headers::get(Self, Int) -> (Bytes, Bytes)?
+pub fn Headers::is_empty(Self) -> Bool
+pub fn Headers::iter(Self) -> Iter[(Bytes, Bytes)]
+pub fn Headers::length(Self) -> Int
+pub fn Headers::new(ArrayView[(Bytes, Bytes)]) -> Self raise ProtocolError
+pub fn Headers::raw_items(Self) -> Array[(Bytes, Bytes)]
+pub fn Headers::to_array(Self) -> Array[(Bytes, Bytes)]
+pub impl Eq for Headers
+pub impl @debug.Debug for Headers
+
+pub struct InformationalResponse {
+  status_code : Int
+  headers : Headers
+  http_version : Bytes
+  reason : Bytes
+} derive(Eq)
+pub fn InformationalResponse::new(status_code~ : Int, headers~ : ArrayView[(Bytes, Bytes)], http_version? : Bytes, reason? : Bytes) -> Self raise ProtocolError
+pub impl @debug.Debug for InformationalResponse
+
+pub(all) enum NextEvent {
+  Event(Event)
+  NeedData
+  Paused
+} derive(Eq, @debug.Debug)
+
+pub struct Request {
+  method : Bytes
+  target : Bytes
+  headers : Headers
+  http_version : Bytes
+} derive(Eq)
+pub fn Request::new(method~ : Bytes, target~ : Bytes, headers~ : ArrayView[(Bytes, Bytes)], http_version? : Bytes) -> Self raise ProtocolError
+pub impl @debug.Debug for Request
+
+pub struct Response {
+  status_code : Int
+  headers : Headers
+  http_version : Bytes
+  reason : Bytes
+} derive(Eq)
+pub fn Response::new(status_code~ : Int, headers~ : ArrayView[(Bytes, Bytes)], http_version? : Bytes, reason? : Bytes) -> Self raise ProtocolError
+pub impl @debug.Debug for Response
+
+pub(all) enum Role {
+  Client
+  Server
+} derive(Eq, Hash, @debug.Debug)
+pub fn Role::other(Self) -> Self
+pub impl Show for Role
+
+pub(all) enum State {
+  Idle
+  SendResponse
+  SendBody
+  Done
+  MustClose
+  Closed
+  MightSwitchProtocol
+  SwitchedProtocol
+  Error
+} derive(Eq, Hash, @debug.Debug)
+pub impl Show for State
+
+pub(all) struct States {
+  client : State
+  server : State
+} derive(Eq, Hash, @debug.Debug)
+#alias("_[_]")
+pub fn States::get(Self, Role) -> State
+pub impl Show for States
+
+// Type aliases
+
+// Traits

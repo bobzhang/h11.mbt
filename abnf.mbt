@@ -165,8 +165,8 @@ fn match_status_line(line : BytesView) -> (BytesView, Int, BytesView?)? {
 ///|
 /// chunk-header = 1*20HEXDIG [ ";" chunk-ext ] OWS CRLF
 ///
-/// Chunk extensions are accepted and discarded. Returns the chunk size.
-/// Sizes that do not fit in an `Int64` are rejected.
+/// Chunk extensions are accepted and discarded. Returns the chunk size
+/// (saturated at `Int64` max, see `parse_digits`).
 fn match_chunk_header(line : BytesView) -> Int64? {
   guard line.length() >= 2 &&
     line[line.length() - 2] == b'\r' &&
