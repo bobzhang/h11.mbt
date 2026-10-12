@@ -385,7 +385,9 @@ def gen_case(rng):
 
 def build_moonbit():
     subprocess.run(["moon", "build", "--release"], cwd=HERE, check=True, capture_output=True)
-    exe = os.path.join(HERE, "_build", "native", "release", "build", "difftest", "difftest.exe")
+    exe = os.path.join(
+        HERE, "_build", "native", "release", "build", "bobzhang", "h11-fuzz", "difftest", "difftest.exe"
+    )
     assert os.path.exists(exe), exe
     return exe
 
