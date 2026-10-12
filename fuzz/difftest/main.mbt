@@ -62,7 +62,7 @@ fn fmt_event(e : @h11.Event) -> String {
 ///|
 /// Events the client sends before reading, per variant (see client_script
 /// in difftest.py).
-fn client_script(variant : Int) -> Array[@h11.Event] raise {
+fn client_script(variant : Int32) -> Array[@h11.Event] raise {
   let host = (b"Host", b"x")
   match variant {
     1 =>
@@ -122,7 +122,7 @@ fn client_script(variant : Int) -> Array[@h11.Event] raise {
 ///|
 /// Events the server sends in response to a finished request (see
 /// server_script in difftest.py).
-fn server_script(variant : Int) -> Array[@h11.Event] raise {
+fn server_script(variant : Int32) -> Array[@h11.Event] raise {
   match variant {
     1 =>
       [
@@ -205,7 +205,7 @@ fn send_all(
 ///|
 fn run_case(
   role : @h11.Role,
-  variant : Int,
+  variant : Int32,
   chunks : Array[Bytes],
   out : Array[String],
 ) -> Unit {
