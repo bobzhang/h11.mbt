@@ -23,7 +23,7 @@ fn is_digit(b : Byte) -> Bool {
 }
 
 ///|
-fn hex_value(b : Byte) -> Int? {
+fn hex_value(b : Byte) -> Int32? {
   if is_digit(b) {
     Some((b - b'0').to_int())
   } else if b >= b'a' && b <= b'f' {
@@ -117,7 +117,7 @@ fn bytes_concat(parts : Array[Bytes]) -> Bytes {
 /// saturate at `Int64` max: Python accepts arbitrarily large integers here,
 /// and no real stream can ever get close to 2^63 bytes, so saturating keeps
 /// the observable behavior identical.
-fn parse_digits(s : BytesView, radix~ : Int) -> Int64? {
+fn parse_digits(s : BytesView, radix~ : Int32) -> Int64? {
   if s.is_empty() {
     return None
   }

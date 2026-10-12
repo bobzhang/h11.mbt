@@ -142,7 +142,7 @@ fn is_reason_byte(b : Byte) -> Bool {
 ///
 /// (The reason phrase is optional because many servers omit it.)
 /// Returns `(http_version, status_code, reason)`.
-fn match_status_line(line : BytesView) -> (BytesView, Int, BytesView?)? {
+fn match_status_line(line : BytesView) -> (BytesView, Int32, BytesView?)? {
   if line.length() < 12 {
     return None
   }

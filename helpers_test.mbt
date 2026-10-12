@@ -105,27 +105,27 @@ fn req(
   meth : Bytes,
   target : Bytes,
   headers : Array[(Bytes, Bytes)],
-  http_version? : Bytes = b"1.1",
+  http_version~ : Bytes = b"1.1",
 ) -> @h11.Event raise {
   Request(@h11.Request::new(method_=meth, target~, headers~, http_version~))
 }
 
 ///|
 fn resp(
-  status_code : Int,
+  status_code : Int32,
   headers : Array[(Bytes, Bytes)],
-  http_version? : Bytes = b"1.1",
-  reason? : Bytes = b"",
+  http_version~ : Bytes = b"1.1",
+  reason~ : Bytes = b"",
 ) -> @h11.Event raise {
   Response(@h11.Response::new(status_code~, headers~, http_version~, reason~))
 }
 
 ///|
 fn info_resp(
-  status_code : Int,
+  status_code : Int32,
   headers : Array[(Bytes, Bytes)],
-  http_version? : Bytes = b"1.1",
-  reason? : Bytes = b"",
+  http_version~ : Bytes = b"1.1",
+  reason~ : Bytes = b"",
 ) -> @h11.Event raise {
   InformationalResponse(
     @h11.InformationalResponse::new(
@@ -140,14 +140,14 @@ fn info_resp(
 ///|
 fn data(
   bytes : Bytes,
-  chunk_start? : Bool = false,
-  chunk_end? : Bool = false,
+  chunk_start~ : Bool = false,
+  chunk_end~ : Bool = false,
 ) -> @h11.Event {
   Data(@h11.Data::new(bytes, chunk_start~, chunk_end~))
 }
 
 ///|
-fn eom(headers? : Array[(Bytes, Bytes)] = []) -> @h11.Event raise {
+fn eom(headers~ : Array[(Bytes, Bytes)] = []) -> @h11.Event raise {
   EndOfMessage(@h11.EndOfMessage::new(headers~))
 }
 

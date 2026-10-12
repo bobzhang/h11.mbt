@@ -35,7 +35,7 @@ pub fn Request::new(
   method_~ : Bytes,
   target~ : Bytes,
   headers~ : ArrayView[(Bytes, Bytes)],
-  http_version? : Bytes = b"1.1",
+  http_version~ : Bytes = b"1.1",
 ) -> Request raise ProtocolError {
   Request::make(
     method_,
@@ -92,7 +92,7 @@ pub impl Debug for Request with fn to_repr(self) {
 /// An HTTP informational response; `status_code` is always in the range
 /// [100, 200).
 pub struct InformationalResponse {
-  status_code : Int
+  status_code : Int32
   headers : Headers
   http_version : Bytes
   reason : Bytes
@@ -101,10 +101,10 @@ pub struct InformationalResponse {
 ///|
 /// Construct and validate an `InformationalResponse`.
 pub fn InformationalResponse::new(
-  status_code~ : Int,
+  status_code~ : Int32,
   headers~ : ArrayView[(Bytes, Bytes)],
-  http_version? : Bytes = b"1.1",
-  reason? : Bytes = b"",
+  http_version~ : Bytes = b"1.1",
+  reason~ : Bytes = b"",
 ) -> InformationalResponse raise ProtocolError {
   InformationalResponse::make(
     status_code,
@@ -116,7 +116,7 @@ pub fn InformationalResponse::new(
 
 ///|
 fn InformationalResponse::make(
-  status_code : Int,
+  status_code : Int32,
   headers : Headers,
   http_version : Bytes,
   reason : Bytes,
@@ -143,7 +143,7 @@ pub impl Debug for InformationalResponse with fn to_repr(self) {
 /// The beginning of an HTTP response; `status_code` is always in the range
 /// [200, 1000).
 pub struct Response {
-  status_code : Int
+  status_code : Int32
   headers : Headers
   http_version : Bytes
   reason : Bytes
@@ -159,10 +159,10 @@ pub struct Response {
 /// }
 /// ```
 pub fn Response::new(
-  status_code~ : Int,
+  status_code~ : Int32,
   headers~ : ArrayView[(Bytes, Bytes)],
-  http_version? : Bytes = b"1.1",
-  reason? : Bytes = b"",
+  http_version~ : Bytes = b"1.1",
+  reason~ : Bytes = b"",
 ) -> Response raise ProtocolError {
   Response::make(
     status_code,
@@ -174,7 +174,7 @@ pub fn Response::new(
 
 ///|
 fn Response::make(
-  status_code : Int,
+  status_code : Int32,
   headers : Headers,
   http_version : Bytes,
   reason : Bytes,
@@ -213,8 +213,8 @@ pub struct Data {
 ///|
 pub fn Data::new(
   data : Bytes,
-  chunk_start? : Bool = false,
-  chunk_end? : Bool = false,
+  chunk_start~ : Bool = false,
+  chunk_end~ : Bool = false,
 ) -> Data {
   { data, chunk_start, chunk_end, }
 }
@@ -237,7 +237,7 @@ pub struct EndOfMessage {
 
 ///|
 pub fn EndOfMessage::new(
-  headers? : ArrayView[(Bytes, Bytes)] = [],
+  headers~ : ArrayView[(Bytes, Bytes)] = [],
 ) -> EndOfMessage raise ProtocolError {
   { headers: normalize_and_validate(headers, parsed=false), }
 }

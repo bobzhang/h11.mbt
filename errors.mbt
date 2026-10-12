@@ -12,8 +12,8 @@
 /// might use if this error occurred as part of a request. The default is
 /// 400 Bad Request.
 pub(all) suberror ProtocolError {
-  LocalProtocolError(String, error_status_hint~ : Int)
-  RemoteProtocolError(String, error_status_hint~ : Int)
+  LocalProtocolError(String, error_status_hint~ : Int32)
+  RemoteProtocolError(String, error_status_hint~ : Int32)
 }
 
 ///|
@@ -33,7 +33,7 @@ pub fn ProtocolError::message(self : ProtocolError) -> String {
 
 ///|
 /// The suggested HTTP status code for responding to this error.
-pub fn ProtocolError::error_status_hint(self : ProtocolError) -> Int {
+pub fn ProtocolError::error_status_hint(self : ProtocolError) -> Int32 {
   match self {
     LocalProtocolError(_, error_status_hint~)
     | RemoteProtocolError(_, error_status_hint~) => error_status_hint
@@ -76,6 +76,6 @@ pub impl Show for RuntimeError with fn output(self, logger) {
 ///|
 /// Internally we always raise `LocalProtocolError`; `next_event` translates
 /// it into a `RemoteProtocolError`.
-fn local_error(msg : String, error_status_hint? : Int = 400) -> ProtocolError {
+fn local_error(msg : String, error_status_hint~ : Int32 = 400) -> ProtocolError {
   LocalProtocolError(msg, error_status_hint~)
 }

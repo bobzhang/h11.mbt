@@ -17,13 +17,13 @@
 priv struct ReceiveBuffer {
   mut data : FixedArray[Byte]
   /// Offset of the first unconsumed byte in `data`.
-  mut start : Int
+  mut start : Int32
   /// Offset one past the last valid byte in `data`.
-  mut end : Int
+  mut end : Int32
   /// Relative to `start`: how far `maybe_extract_next_line` has searched.
-  mut next_line_search : Int
+  mut next_line_search : Int32
   /// Relative to `start`: how far `maybe_extract_lines` has searched.
-  mut multiple_lines_search : Int
+  mut multiple_lines_search : Int32
 }
 
 ///|
@@ -38,7 +38,7 @@ fn ReceiveBuffer::new() -> ReceiveBuffer {
 }
 
 ///|
-fn ReceiveBuffer::length(self : ReceiveBuffer) -> Int {
+fn ReceiveBuffer::length(self : ReceiveBuffer) -> Int32 {
   self.end - self.start
 }
 
@@ -48,7 +48,7 @@ fn ReceiveBuffer::is_empty(self : ReceiveBuffer) -> Bool {
 }
 
 ///|
-fn ReceiveBuffer::at(self : ReceiveBuffer, i : Int) -> Byte {
+fn ReceiveBuffer::at(self : ReceiveBuffer, i : Int32) -> Byte {
   self.data[self.start + i]
 }
 
@@ -98,7 +98,7 @@ fn ReceiveBuffer::to_bytes(self : ReceiveBuffer) -> Bytes {
 
 ///|
 /// Remove and return the first `count` bytes (`count <= length`).
-fn ReceiveBuffer::extract(self : ReceiveBuffer, count : Int) -> Bytes {
+fn ReceiveBuffer::extract(self : ReceiveBuffer, count : Int32) -> Bytes {
   let out = Bytes::makei(count, i => self.at(i))
   self.start += count
   if self.start == self.end {

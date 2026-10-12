@@ -64,7 +64,7 @@ fn write_request(
 ///|
 /// Shared between InformationalResponse and Response.
 fn write_any_response(
-  status_code : Int,
+  status_code : Int32,
   headers : Headers,
   http_version : Bytes,
   reason : Bytes,
