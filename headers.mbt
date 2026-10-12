@@ -41,7 +41,7 @@ pub fn Headers::empty() -> Headers {
 }
 
 ///|
-pub fn Headers::length(self : Headers) -> Int {
+pub fn Headers::length(self : Headers) -> Int32 {
   self.full_items.length()
 }
 
@@ -53,7 +53,7 @@ pub fn Headers::is_empty(self : Headers) -> Bool {
 ///|
 /// The `idx`-th header as a `(lowercased_name, value)` pair.
 #alias("_[_]")
-pub fn Headers::at(self : Headers, idx : Int) -> (Bytes, Bytes) {
+pub fn Headers::at(self : Headers, idx : Int32) -> (Bytes, Bytes) {
   let (_, name, value) = self.full_items[idx]
   (name, value)
 }
@@ -61,7 +61,7 @@ pub fn Headers::at(self : Headers, idx : Int) -> (Bytes, Bytes) {
 ///|
 /// The `idx`-th header as a `(lowercased_name, value)` pair, or `None` if
 /// `idx` is out of range.
-pub fn Headers::get(self : Headers, idx : Int) -> (Bytes, Bytes)? {
+pub fn Headers::get(self : Headers, idx : Int32) -> (Bytes, Bytes)? {
   match self.full_items.get(idx) {
     Some((_, name, value)) => Some((name, value))
     None => None

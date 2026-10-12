@@ -533,7 +533,7 @@ fn t_body_reader(
   thunk : () -> Reader,
   data : Bytes,
   expected : BodyExpected,
-  do_eof? : Bool = false,
+  do_eof~ : Bool = false,
 ) -> Unit raise {
   // Simple: consume whole thing
   check_body_result(expected, () => run_reader(thunk(), makebuf(data), do_eof))
@@ -560,7 +560,7 @@ fn t_body_reader(
 }
 
 ///|
-fn eom(headers? : ArrayView[(Bytes, Bytes)] = []) -> Event raise {
+fn eom(headers~ : ArrayView[(Bytes, Bytes)] = []) -> Event raise {
   Event::EndOfMessage(EndOfMessage::new(headers~))
 }
 

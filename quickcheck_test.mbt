@@ -21,7 +21,7 @@ let vchars : Array[Byte] = Array::makei(0x7e - 0x21 + 1, i => {
 })
 
 ///|
-fn gen_bytes(alphabet : Array[Byte], lo : Int, hi : Int) -> @gen.Gen[Bytes] {
+fn gen_bytes(alphabet : Array[Byte], lo : Int32, hi : Int32) -> @gen.Gen[Bytes] {
   @gen.int_range(lo, hi + 1).bind(n => {
     @gen.one_of_array(alphabet)
     .array_with_size(n)
@@ -30,12 +30,12 @@ fn gen_bytes(alphabet : Array[Byte], lo : Int, hi : Int) -> @gen.Gen[Bytes] {
 }
 
 ///|
-fn gen_any_bytes(lo : Int, hi : Int) -> @gen.Gen[Bytes] {
+fn gen_any_bytes(lo : Int32, hi : Int32) -> @gen.Gen[Bytes] {
   gen_bytes(Array::makei(256, i => i.to_byte()), lo, hi)
 }
 
 ///|
-fn[T] gen_array(g : @gen.Gen[T], lo : Int, hi : Int) -> @gen.Gen[Array[T]] {
+fn[T] gen_array(g : @gen.Gen[T], lo : Int32, hi : Int32) -> @gen.Gen[Array[T]] {
   @gen.int_range(lo, hi + 1).bind(n => g.array_with_size(n))
 }
 
@@ -88,7 +88,7 @@ fn ascii_lower_test(b : Bytes) -> Bytes {
 
 ///|
 /// Split `data` at the given (unsorted, possibly out of range) points.
-fn fragment(data : Bytes, points : Array[Int]) -> Array[Bytes] {
+fn fragment(data : Bytes, points : Array[Int32]) -> Array[Bytes] {
   let cuts = points
     .map(p => if data.length() == 0 { 0 } else { p.abs() % data.length() })
     .filter(p => p > 0)
@@ -219,7 +219,7 @@ struct ReqCase {
   body : Array[Bytes]
   chunked : Bool
   trailers : Array[(Bytes, Bytes)]
-  splits : Array[Int]
+  splits : Array[Int32]
 } derive(Debug)
 
 ///|
@@ -318,14 +318,14 @@ test "property: requests round trip through any fragmentation" {
 /// A randomly generated, valid response, sent to an HTTP/1.0 or HTTP/1.1
 /// client, with or without an explicit Content-Length.
 struct RespCase {
-  status_code : Int
+  status_code : Int32
   reason : Bytes
   headers : Array[(Bytes, Bytes)]
   body : Array[Bytes]
   use_content_length : Bool
   client_http10 : Bool
   head_request : Bool
-  splits : Array[Int]
+  splits : Array[Int32]
 } derive(Debug)
 
 ///|
@@ -552,7 +552,7 @@ test "property: fragmentation never changes the outcome" {
           gen_array(@gen.int_range(0, 100000), 0, 10),
         ).fmap(t => (role, t.0, t.1))
       }),
-      (t : (@h11.Role, Bytes, Array[Int])) => {
+      (t : (@h11.Role, Bytes, Array[Int32])) => {
         let (role, input, splits) = t
         check(() => {
           let whole = drive(role, [input])
@@ -569,7 +569,7 @@ test "property: fragmentation never changes the outcome" {
 /// Content-Length / Transfer-Encoding header lists: several spellings of the
 /// same length (repeated headers, comma lists), optionally a chunked
 /// Transfer-Encoding in any case, mixed with plain headers.
-fn gen_framing_headers() -> @gen.Gen[(Int, Array[(Bytes, Bytes)], Bool)] {
+fn gen_framing_headers() -> @gen.Gen[(Int32, Array[(Bytes, Bytes)], Bool)] {
   @gen.quad(
     @gen.int_range(0, 50),
     gen_array(@gen.int_range(0, 3), 1, 4),
@@ -603,7 +603,7 @@ fn gen_framing_headers() -> @gen.Gen[(Int, Array[(Bytes, Bytes)], Bool)] {
 ///|
 test "property: Content-Length and Transfer-Encoding normalization" {
   @qc.quick_check(
-    @qc.forall(gen_framing_headers(), (t : (Int, Array[(Bytes, Bytes)], Bool)) => {
+    @qc.forall(gen_framing_headers(), (t : (Int32, Array[(Bytes, Bytes)], Bool)) => {
       let (n, raw, chunked) = t
       check(() => {
         let d = @utf8.encode(n.to_string())
@@ -712,7 +712,7 @@ test "property: chunked bodies keep exact chunk boundaries under any fragmentati
         gen_array(gen_any_bytes(0, 40), 0, 8),
         gen_array(@gen.int_range(0, 100000), 0, 8),
       ),
-      (t : (Array[Bytes], Array[Int])) => {
+      (t : (Array[Bytes], Array[Int32])) => {
         let (chunks, splits) = t
         check(() => {
           let client = @h11.Connection::new(Client)

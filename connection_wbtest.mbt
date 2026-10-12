@@ -5,7 +5,7 @@
 ///|
 fn keep_alive_req(
   headers : Array[(Bytes, Bytes)],
-  http_version? : Bytes = b"1.1",
+  http_version~ : Bytes = b"1.1",
 ) -> Bool raise {
   let r = Request::new(method_=b"GET", target=b"/", headers~, http_version~)
   keep_alive(r.headers, r.http_version)
@@ -14,7 +14,7 @@ fn keep_alive_req(
 ///|
 fn keep_alive_resp(
   headers : Array[(Bytes, Bytes)],
-  http_version? : Bytes = b"1.1",
+  http_version~ : Bytes = b"1.1",
 ) -> Bool raise {
   let r = Response::new(status_code=200, headers~, http_version~)
   keep_alive(r.headers, r.http_version)
@@ -40,7 +40,7 @@ test "_keep_alive" {
 }
 
 ///|
-fn framing_headers(cl : Int?, te : Bool) -> Array[(Bytes, Bytes)] {
+fn framing_headers(cl : Int32?, te : Bool) -> Array[(Bytes, Bytes)] {
   let headers = []
   if cl is Some(cl) {
     headers.push((b"Content-Length", @utf8.encode(cl.to_string())))
@@ -53,15 +53,15 @@ fn framing_headers(cl : Int?, te : Bool) -> Array[(Bytes, Bytes)] {
 
 ///|
 fn framing_resp(
-  status_code? : Int = 200,
-  cl? : Int,
-  te? : Bool = false,
+  status_code~ : Int32 = 200,
+  cl? : Int32,
+  te~ : Bool = false,
 ) -> Event raise {
   Response(Response::new(status_code~, headers=framing_headers(cl, te)))
 }
 
 ///|
-fn framing_req(cl? : Int, te? : Bool = false) -> Event raise {
+fn framing_req(cl? : Int32, te~ : Bool = false) -> Event raise {
   let h = framing_headers(cl, te)
   h.push((b"Host", b"example.com"))
   Request(Request::new(method_=b"GET", target=b"/", headers=h))
