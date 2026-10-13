@@ -12,8 +12,8 @@ warnings = "-79"
 import {
   "moonbitlang/core/buffer",
   "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/quickcheck",
   "moonbitlang/quickcheck" @qc,
-  "moonbitlang/quickcheck/gen",
 } for "test"
 
 import {

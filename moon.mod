@@ -13,5 +13,5 @@ keywords = [ "http", "http11", "sans-io", "protocol" ]
 description = "A pure, bring-your-own-I/O implementation of HTTP/1.1 (port of python-hyper/h11)"
 
 import {
-  "moonbitlang/quickcheck@0.14.0",
+  "moonbitlang/quickcheck@0.15.0",
 }
