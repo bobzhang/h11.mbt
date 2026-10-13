@@ -21,33 +21,79 @@ let vchars : Array[Byte] = Array::makei(0x7e - 0x21 + 1, i => {
 })
 
 ///|
-fn gen_bytes(alphabet : Array[Byte], lo : Int, hi : Int) -> @gen.Gen[Bytes] {
-  @gen.int_range(lo, hi + 1).bind(n => {
-    @gen.one_of_array(alphabet)
+fn gen_bytes(
+  alphabet : Array[Byte],
+  lo : Int32,
+  hi : Int32,
+) -> @quickcheck.Generator[Bytes] {
+  @quickcheck.int_range(lo, hi + 1).flat_map(n => {
+    @quickcheck.elements(alphabet)
     .array_with_size(n)
-    .fmap(a => Bytes::from_array(a))
+    .map(a => Bytes::from_array(a))
   })
 }
 
 ///|
-fn gen_any_bytes(lo : Int, hi : Int) -> @gen.Gen[Bytes] {
+fn gen_any_bytes(lo : Int32, hi : Int32) -> @quickcheck.Generator[Bytes] {
   gen_bytes(Array::makei(256, i => i.to_byte()), lo, hi)
 }
 
 ///|
-fn[T] gen_array(g : @gen.Gen[T], lo : Int, hi : Int) -> @gen.Gen[Array[T]] {
-  @gen.int_range(lo, hi + 1).bind(n => g.array_with_size(n))
+fn[T] gen_array(
+  g : @quickcheck.Generator[T],
+  lo : Int32,
+  hi : Int32,
+) -> @quickcheck.Generator[Array[T]] {
+  @quickcheck.int_range(lo, hi + 1).flat_map(n => g.array_with_size(n))
+}
+
+///|
+/// Four independent generators as one 4-tuple (`@gen.quad` in quickcheck
+/// 0.14; the core generators stop at `zip`).
+fn[T, U, V, W] gen_quad(
+  gen1 : @quickcheck.Generator[T],
+  gen2 : @quickcheck.Generator[U],
+  gen3 : @quickcheck.Generator[V],
+  gen4 : @quickcheck.Generator[W],
+) -> @quickcheck.Generator[(T, U, V, W)] {
+  gen1.flat_map(x => {
+    gen2.flat_map(y => gen3.flat_map(z => gen4.map(w => (x, y, z, w))))
+  })
+}
+
+///|
+/// Values of `g` that satisfy `pred` (`Gen::such_that` in quickcheck 0.14,
+/// which the core generators do not have). Same retry schedule: at size `n`
+/// try the sizes `n ..= 2n`, then start over at size `n + 1`.
+fn[T] such_that(
+  g : @quickcheck.Generator[T],
+  pred : (T) -> Bool,
+) -> @quickcheck.Generator[T] {
+  @quickcheck.Generator((size, state) => {
+    for n = size, state = state {
+      let next_round = state.split()
+      for m = n, state = state; m <= 2 * n; {
+        let next_try = state.split()
+        let x = g.run(m, state)
+        if pred(x) {
+          return x
+        }
+        continue m + 1, next_try
+      }
+      continue n + 1, next_round
+    }
+  })
 }
 
 ///|
 /// A header value: field-vchars (including obs-text and the control
 /// characters h11 tolerates) with single internal spaces/tabs.
-fn gen_header_value() -> @gen.Gen[Bytes] {
+fn gen_header_value() -> @quickcheck.Generator[Bytes] {
   let field_vchars = Array::makei(256, i => i.to_byte()).filter(b => {
     b != b'\x00' && !(b is (b' ' | b'\t' | b'\n' | b'\r' | b'\x0b' | b'\x0c'))
   })
-  gen_array(gen_bytes(field_vchars, 1, 6), 0, 4).bind(words => {
-    @gen.one_of_array([b" ", b"\t", b" \t "]).fmap(sep => {
+  gen_array(gen_bytes(field_vchars, 1, 6), 0, 4).flat_map(words => {
+    @quickcheck.elements([b" ", b"\t", b" \t "]).map(sep => {
       let buf = @buffer.Buffer()
       for i, w in words {
         if i > 0 {
@@ -68,8 +114,8 @@ let special_headers : Array[Bytes] = [
 ]
 
 ///|
-fn gen_plain_header() -> @gen.Gen[(Bytes, Bytes)] {
-  @gen.tuple(gen_bytes(tchars, 1, 10), gen_header_value()).such_that(h => {
+fn gen_plain_header() -> @quickcheck.Generator[(Bytes, Bytes)] {
+  such_that(gen_bytes(tchars, 1, 10).zip(gen_header_value()), h => {
     !special_headers.contains(ascii_lower_test(h.0))
   })
 }
@@ -88,7 +134,7 @@ fn ascii_lower_test(b : Bytes) -> Bytes {
 
 ///|
 /// Split `data` at the given (unsorted, possibly out of range) points.
-fn fragment(data : Bytes, points : Array[Int]) -> Array[Bytes] {
+fn fragment(data : Bytes, points : Array[Int32]) -> Array[Bytes] {
   let cuts = points
     .map(p => if data.length() == 0 { 0 } else { p.abs() % data.length() })
     .filter(p => p > 0)
@@ -219,26 +265,22 @@ struct ReqCase {
   body : Array[Bytes]
   chunked : Bool
   trailers : Array[(Bytes, Bytes)]
-  splits : Array[Int]
+  splits : Array[Int32]
 } derive(Debug)
 
 ///|
-fn gen_req_case() -> @gen.Gen[ReqCase] {
-  @gen.quad(
-    @gen.tuple(
-      @gen.frequency([
-        (3, gen_bytes(tchars, 1, 8)),
-        (1, @gen.one_of_array([b"GET", b"POST", b"HEAD", b"PUT", b"CONNECT"])),
-      ]),
-      gen_bytes(vchars, 0, 20),
-    ),
+fn gen_req_case() -> @quickcheck.Generator[ReqCase] {
+  gen_quad(
+    @quickcheck.frequency([
+      (3, gen_bytes(tchars, 1, 8)),
+      (1, @quickcheck.elements([b"GET", b"POST", b"HEAD", b"PUT", b"CONNECT"])),
+    ]).zip(gen_bytes(vchars, 0, 20)),
     gen_array(gen_plain_header(), 0, 5),
-    @gen.tuple(gen_array(gen_any_bytes(0, 30), 0, 4), @gen.Gen::spawn()),
-    @gen.tuple(
-      gen_array(gen_plain_header(), 0, 2),
-      gen_array(@gen.int_range(0, 100000), 0, 8),
+    gen_array(gen_any_bytes(0, 30), 0, 4).zip(@quickcheck.spawn()),
+    gen_array(gen_plain_header(), 0, 2).zip(
+      gen_array(@quickcheck.int_range(0, 100000), 0, 8),
     ),
-  ).fmap(t => {
+  ).map(t => {
     let ((meth, target), headers, (body, chunked), (trailers, splits)) = t
     {
       meth,
@@ -318,32 +360,34 @@ test "property: requests round trip through any fragmentation" {
 /// A randomly generated, valid response, sent to an HTTP/1.0 or HTTP/1.1
 /// client, with or without an explicit Content-Length.
 struct RespCase {
-  status_code : Int
+  status_code : Int32
   reason : Bytes
   headers : Array[(Bytes, Bytes)]
   body : Array[Bytes]
   use_content_length : Bool
   client_http10 : Bool
   head_request : Bool
-  splits : Array[Int]
+  splits : Array[Int32]
 } derive(Debug)
 
 ///|
-fn gen_resp_case() -> @gen.Gen[RespCase] {
-  @gen.quad(
-    @gen.tuple(
-      @gen.int_range(200, 1000),
+fn gen_resp_case() -> @quickcheck.Generator[RespCase] {
+  gen_quad(
+    @quickcheck.int_range(200, 1000).zip(
       gen_bytes(vchars + [b' ', b'\t'], 0, 12),
     ),
     gen_array(gen_plain_header(), 0, 5),
     gen_array(gen_any_bytes(0, 30), 0, 4),
-    @gen.quad(
-      @gen.Gen::spawn(),
-      @gen.Gen::spawn(),
-      @gen.frequency([(1, @gen.pure(true)), (4, @gen.pure(false))]),
-      gen_array(@gen.int_range(0, 100000), 0, 8),
+    gen_quad(
+      @quickcheck.spawn(),
+      @quickcheck.spawn(),
+      @quickcheck.frequency([
+        (1, @quickcheck.pure(true)),
+        (4, @quickcheck.pure(false)),
+      ]),
+      gen_array(@quickcheck.int_range(0, 100000), 0, 8),
     ),
-  ).fmap(t => {
+  ).map(t => {
     let ((status_code, reason), headers, body, (use_cl, http10, head, splits)) = t
     {
       status_code,
@@ -443,16 +487,15 @@ test "property: responses round trip for HTTP/1.0 and HTTP/1.1 peers" {
 ///|
 /// A valid response on the wire, with Content-Length, chunked, or
 /// close-delimited framing.
-fn gen_response_wire() -> @gen.Gen[Bytes] {
-  @gen.quad(
-    @gen.tuple(
-      @gen.int_range(100, 1000),
+fn gen_response_wire() -> @quickcheck.Generator[Bytes] {
+  gen_quad(
+    @quickcheck.int_range(100, 1000).zip(
       gen_bytes(vchars + [b' ', b'\t'], 0, 12),
     ),
     gen_array(gen_plain_header(), 0, 4),
     gen_array(gen_any_bytes(1, 20), 0, 3),
-    @gen.int_range(0, 3),
-  ).fmap(t => {
+    @quickcheck.int_range(0, 3),
+  ).map(t => {
     let ((status, reason), headers, chunks, framing) = t
     let buf = @buffer.Buffer()
     buf.write_bytes(
@@ -496,7 +539,7 @@ fn gen_response_wire() -> @gen.Gen[Bytes] {
 /// Inputs for the robustness properties: valid messages, mutated valid
 /// messages, and HTTP-flavoured garbage. Requests for a server, responses
 /// for a client.
-fn gen_wire_input(role : @h11.Role) -> @gen.Gen[Bytes] {
+fn gen_wire_input(role : @h11.Role) -> @quickcheck.Generator[Bytes] {
   let tokens : Array[Bytes] = [
     b"GET ", b"POST ", b"/", b" HTTP/1.1", b" HTTP/1.0", b"HTTP/1.1 ", b"200", b" OK",
     b"101", b"\r\n", b"\n", b"\r", b": ", b":", b" ", b"\t", b"Host", b"Content-Length",
@@ -506,7 +549,7 @@ fn gen_wire_input(role : @h11.Role) -> @gen.Gen[Bytes] {
   ]
   let valid = match role {
     Server =>
-      gen_req_case().fmap(c => {
+      gen_req_case().map(c => {
         let client = @h11.Connection::new(Client)
         let wire = @buffer.Buffer()
         for e in (try! c.events()) {
@@ -516,22 +559,27 @@ fn gen_wire_input(role : @h11.Role) -> @gen.Gen[Bytes] {
       })
     Client => gen_response_wire()
   }
-  let mutated = @gen.tuple(
-    valid,
-    gen_array(@gen.tuple(@gen.int_range(0, 1 << 20), gen_any_bytes(0, 3)), 1, 4),
-  ).fmap(t => {
-    let (base, edits) = t
-    let mut b = base
-    for edit in edits {
-      let (pos, ins) = edit
-      let p = if b.length() == 0 { 0 } else { pos % b.length() }
-      // replace one byte at `p` with `ins` (deletion when `ins` is empty)
-      let end = if p < b.length() { p + 1 } else { p }
-      b = b[:p].to_owned() + ins + b[end:].to_owned()
-    }
-    b
-  })
-  let garbage = gen_array(@gen.one_of_array(tokens), 0, 30).fmap(parts => {
+  let mutated = valid
+    .zip(
+      gen_array(
+        @quickcheck.int_range(0, 1 << 20).zip(gen_any_bytes(0, 3)),
+        1,
+        4,
+      ),
+    )
+    .map(t => {
+      let (base, edits) = t
+      let mut b = base
+      for edit in edits {
+        let (pos, ins) = edit
+        let p = if b.length() == 0 { 0 } else { pos % b.length() }
+        // replace one byte at `p` with `ins` (deletion when `ins` is empty)
+        let end = if p < b.length() { p + 1 } else { p }
+        b = b[:p].to_owned() + ins + b[end:].to_owned()
+      }
+      b
+    })
+  let garbage = gen_array(@quickcheck.elements(tokens), 0, 30).map(parts => {
     let g = parts.fold(init=b"", (acc, p) => acc + p)
     if role is Client {
       b"HTTP/1.1 200 OK\r\n" + g
@@ -539,20 +587,19 @@ fn gen_wire_input(role : @h11.Role) -> @gen.Gen[Bytes] {
       g
     }
   })
-  @gen.frequency([(2, valid), (5, mutated), (3, garbage)])
+  @quickcheck.frequency([(2, valid), (5, mutated), (3, garbage)])
 }
 
 ///|
 test "property: fragmentation never changes the outcome" {
   @qc.quick_check(
     @qc.forall(
-      @gen.one_of_array([@h11.Role::Client, Server]).bind(role => {
-        @gen.tuple(
-          gen_wire_input(role),
-          gen_array(@gen.int_range(0, 100000), 0, 10),
-        ).fmap(t => (role, t.0, t.1))
+      @quickcheck.elements([@h11.Role::Client, Server]).flat_map(role => {
+        gen_wire_input(role)
+        .zip(gen_array(@quickcheck.int_range(0, 100000), 0, 10))
+        .map(t => (role, t.0, t.1))
       }),
-      (t : (@h11.Role, Bytes, Array[Int])) => {
+      (t : (@h11.Role, Bytes, Array[Int32])) => {
         let (role, input, splits) = t
         check(() => {
           let whole = drive(role, [input])
@@ -569,18 +616,20 @@ test "property: fragmentation never changes the outcome" {
 /// Content-Length / Transfer-Encoding header lists: several spellings of the
 /// same length (repeated headers, comma lists), optionally a chunked
 /// Transfer-Encoding in any case, mixed with plain headers.
-fn gen_framing_headers() -> @gen.Gen[(Int, Array[(Bytes, Bytes)], Bool)] {
-  @gen.quad(
-    @gen.int_range(0, 50),
-    gen_array(@gen.int_range(0, 3), 1, 4),
-    @gen.one_of_array([
+fn gen_framing_headers() -> @quickcheck.Generator[
+  (Int32, Array[(Bytes, Bytes)], Bool),
+] {
+  gen_quad(
+    @quickcheck.int_range(0, 50),
+    gen_array(@quickcheck.int_range(0, 3), 1, 4),
+    @quickcheck.elements([
       None,
       Some(b"chunked"),
       Some(b"Chunked"),
       Some(b"CHUNKED"),
     ]),
     gen_array(gen_plain_header(), 0, 3),
-  ).fmap(t => {
+  ).map(t => {
     let (n, forms, te, plain) = t
     let d = @utf8.encode(n.to_string())
     let headers = []
@@ -603,7 +652,7 @@ fn gen_framing_headers() -> @gen.Gen[(Int, Array[(Bytes, Bytes)], Bool)] {
 ///|
 test "property: Content-Length and Transfer-Encoding normalization" {
   @qc.quick_check(
-    @qc.forall(gen_framing_headers(), (t : (Int, Array[(Bytes, Bytes)], Bool)) => {
+    @qc.forall(gen_framing_headers(), (t : (Int32, Array[(Bytes, Bytes)], Bool)) => {
       let (n, raw, chunked) = t
       check(() => {
         let d = @utf8.encode(n.to_string())
@@ -708,11 +757,10 @@ test "property: header normalization is idempotent" {
 test "property: chunked bodies keep exact chunk boundaries under any fragmentation" {
   @qc.quick_check(
     @qc.forall(
-      @gen.tuple(
-        gen_array(gen_any_bytes(0, 40), 0, 8),
-        gen_array(@gen.int_range(0, 100000), 0, 8),
+      gen_array(gen_any_bytes(0, 40), 0, 8).zip(
+        gen_array(@quickcheck.int_range(0, 100000), 0, 8),
       ),
-      (t : (Array[Bytes], Array[Int])) => {
+      (t : (Array[Bytes], Array[Int32])) => {
         let (chunks, splits) = t
         check(() => {
           let client = @h11.Connection::new(Client)

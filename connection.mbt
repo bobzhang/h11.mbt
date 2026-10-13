@@ -6,7 +6,7 @@
 /// event, we error out. The only time we really buffer is when reading the
 /// request/response line + headers together, so this is effectively the
 /// limit on the size of that.
-pub const DEFAULT_MAX_INCOMPLETE_EVENT_SIZE : Int = 16 * 1024
+pub const DEFAULT_MAX_INCOMPLETE_EVENT_SIZE : Int32 = 16 * 1024
 
 ///|
 /// The result of `Connection::next_event`.
@@ -96,7 +96,7 @@ fn response_framing(request_method : Bytes?, resp : Response) -> Framing {
 pub struct Connection {
   priv our_role : Role
   priv their_role : Role
-  priv max_incomplete_event_size : Int
+  priv max_incomplete_event_size : Int32
   priv cstate : ConnectionState
   // Reader for their messages, and writer for our message bodies, given the
   // current states
@@ -125,7 +125,7 @@ pub struct Connection {
 /// exceeded, then `next_event` will raise `RemoteProtocolError`.
 pub fn Connection::new(
   our_role : Role,
-  max_incomplete_event_size? : Int = DEFAULT_MAX_INCOMPLETE_EVENT_SIZE,
+  max_incomplete_event_size~ : Int32 = DEFAULT_MAX_INCOMPLETE_EVENT_SIZE,
 ) -> Connection {
   let their_role = our_role.other()
   {
