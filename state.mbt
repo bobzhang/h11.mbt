@@ -23,10 +23,11 @@
 
 ///|
 /// The two roles in an HTTP conversation.
+#derive(Eq, Hash, Debug)
 pub(all) enum Role {
   Client
   Server
-} derive(Eq, Hash, Debug)
+}
 
 ///|
 pub impl Show for Role with fn output(self, logger) {
@@ -50,6 +51,7 @@ pub fn Role::other(self : Role) -> Role {
 ///|
 /// The states of the client and server state machines. See the h11
 /// documentation for the full diagrams.
+#derive(Eq, Hash, Debug)
 pub(all) enum State {
   Idle
   SendResponse
@@ -60,7 +62,7 @@ pub(all) enum State {
   MightSwitchProtocol
   SwitchedProtocol
   Error
-} derive(Eq, Hash, Debug)
+}
 
 ///|
 pub impl Show for State with fn output(self, logger) {
@@ -81,10 +83,11 @@ pub impl Show for State with fn output(self, logger) {
 
 ///|
 /// The joint state of both parties.
+#derive(Eq, Hash, Debug)
 pub(all) struct States {
   client : State
   server : State
-} derive(Eq, Hash, Debug)
+}
 
 ///|
 /// The state of `role`.
@@ -103,10 +106,11 @@ pub impl Show for States with fn output(self, logger) {
 
 ///|
 /// The kinds of protocol switch a client can propose.
+#derive(Eq)
 priv enum SwitchType {
   SwitchUpgrade
   SwitchConnect
-} derive(Eq)
+}
 
 ///|
 /// Keys of the event-triggered transition table.

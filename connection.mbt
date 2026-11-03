@@ -10,6 +10,7 @@ pub const DEFAULT_MAX_INCOMPLETE_EVENT_SIZE : Int32 = 16 * 1024
 
 ///|
 /// The result of `Connection::next_event`.
+#derive(Eq, Debug)
 pub(all) enum NextEvent {
   /// A parsed event.
   Event(Event)
@@ -21,7 +22,7 @@ pub(all) enum NextEvent {
   /// request/response cycle, and you have not yet called
   /// `start_next_cycle`).
   Paused
-} derive(Eq, Debug)
+}
 
 ///|
 /// How a message body is framed.
