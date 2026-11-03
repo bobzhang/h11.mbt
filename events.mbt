@@ -9,12 +9,13 @@
 ///   the more exotic formats described in RFC 7230 section 5.3.
 /// - `headers`: request headers, see `Headers`.
 /// - `http_version`: the protocol version, e.g. `b"1.1"`.
+#derive(Eq)
 pub struct Request {
   method_ : Bytes
   target : Bytes
   headers : Headers
   http_version : Bytes
-} derive(Eq)
+}
 
 ///|
 /// Construct and validate a `Request`.
@@ -91,12 +92,13 @@ pub impl Debug for Request with fn to_repr(self) {
 ///|
 /// An HTTP informational response; `status_code` is always in the range
 /// [100, 200).
+#derive(Eq)
 pub struct InformationalResponse {
   status_code : Int32
   headers : Headers
   http_version : Bytes
   reason : Bytes
-} derive(Eq)
+}
 
 ///|
 /// Construct and validate an `InformationalResponse`.
@@ -142,12 +144,13 @@ pub impl Debug for InformationalResponse with fn to_repr(self) {
 ///|
 /// The beginning of an HTTP response; `status_code` is always in the range
 /// [200, 1000).
+#derive(Eq)
 pub struct Response {
   status_code : Int32
   headers : Headers
   http_version : Bytes
   reason : Bytes
-} derive(Eq)
+}
 
 ///|
 /// Construct and validate a `Response`.
@@ -204,11 +207,12 @@ pub impl Debug for Response with fn to_repr(self) {
 /// the end of a chunk in chunked transfer encoding. They are only meaningful
 /// on events returned by `Connection::next_event` and are ignored by
 /// `Connection::send`. You probably shouldn't rely on them at all.
+#derive(Eq)
 pub struct Data {
   data : Bytes
   chunk_start : Bool
   chunk_end : Bool
-} derive(Eq)
+}
 
 ///|
 pub fn Data::new(
@@ -231,9 +235,10 @@ pub impl Debug for Data with fn to_repr(self) {
 ///|
 /// The end of an HTTP message. `headers` holds any trailing headers, which
 /// must be empty unless `Transfer-Encoding: chunked` is in use.
+#derive(Eq)
 pub struct EndOfMessage {
   headers : Headers
-} derive(Eq)
+}
 
 ///|
 pub fn EndOfMessage::new(
@@ -251,6 +256,7 @@ pub impl Debug for EndOfMessage with fn to_repr(self) {
 /// An h11 event. `ConnectionClosed` indicates that the sender has closed
 /// their outgoing connection (which does not necessarily mean that they
 /// can't receive further data).
+#derive(Eq, Debug)
 pub(all) enum Event {
   Request(Request)
   InformationalResponse(InformationalResponse)
@@ -258,7 +264,7 @@ pub(all) enum Event {
   Data(Data)
   EndOfMessage(EndOfMessage)
   ConnectionClosed
-} derive(Eq, Debug)
+}
 
 ///|
 /// The kind of an event, without its payload. Used by the state machine.

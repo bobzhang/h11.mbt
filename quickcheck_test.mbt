@@ -180,11 +180,12 @@ fn merge_data(in_events : Array[@h11.Event]) -> Array[@h11.Event] {
 
 ///|
 /// The observable result of feeding `chunks` to a fresh connection.
+#derive(Eq, Debug)
 struct Outcome {
   events : Array[@h11.Event]
   error : Bool
   their_state : @h11.State
-} derive(Eq, Debug)
+}
 
 ///|
 /// Feed `chunks` (then EOF) to a fresh `role` connection, pulling events
@@ -258,6 +259,7 @@ fn drive(role : @h11.Role, chunks : Array[Bytes]) -> Outcome raise {
 
 ///|
 /// A randomly generated, valid request message.
+#derive(Debug)
 struct ReqCase {
   meth : Bytes
   target : Bytes
@@ -266,7 +268,7 @@ struct ReqCase {
   chunked : Bool
   trailers : Array[(Bytes, Bytes)]
   splits : Array[Int32]
-} derive(Debug)
+}
 
 ///|
 fn gen_req_case() -> @quickcheck.Generator[ReqCase] {
@@ -359,6 +361,7 @@ test "property: requests round trip through any fragmentation" {
 ///|
 /// A randomly generated, valid response, sent to an HTTP/1.0 or HTTP/1.1
 /// client, with or without an explicit Content-Length.
+#derive(Debug)
 struct RespCase {
   status_code : Int32
   reason : Bytes
@@ -368,7 +371,7 @@ struct RespCase {
   client_http10 : Bool
   head_request : Bool
   splits : Array[Int32]
-} derive(Debug)
+}
 
 ///|
 fn gen_resp_case() -> @quickcheck.Generator[RespCase] {
