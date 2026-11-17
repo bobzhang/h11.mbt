@@ -964,8 +964,8 @@ test "special exceptions for lost connection in message body" {
   assert_eq(c.next_event(), Event(data(b"12345")))
   c.receive_data(b"")
   let err = expect_remote_error(() => c.next_event() |> ignore)
-  assert_true(Show::to_string(err).contains("received 5 bytes"))
-  assert_true(Show::to_string(err).contains("expected 100"))
+  assert_true(err.to_string().contains("received 5 bytes"))
+  assert_true(err.to_string().contains("expected 100"))
   let c = @h11.Connection::new(Server)
   c.receive_data(
     b"POST / HTTP/1.1\r\n" +
@@ -979,5 +979,5 @@ test "special exceptions for lost connection in message body" {
   assert_eq(d.data, b"012345")
   c.receive_data(b"")
   let err = expect_remote_error(() => c.next_event() |> ignore)
-  assert_true(Show::to_string(err).contains("incomplete chunked read"))
+  assert_true(err.to_string().contains("incomplete chunked read"))
 }
