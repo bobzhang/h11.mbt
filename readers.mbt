@@ -158,7 +158,7 @@ fn obsolete_line_fold(
       if last is Some(buf) {
         out.push(buf.to_bytes())
       }
-      let buf = @buffer.Buffer(capacity=line.length())
+      let buf = @buffer.Buffer()
       buf.write_bytes(line)
       last = Some(buf)
     }
