@@ -23,11 +23,13 @@ pub fn ProtocolError::error_status_hint(Self) -> Int32
 pub fn ProtocolError::is_local(Self) -> Bool
 pub fn ProtocolError::is_remote(Self) -> Bool
 pub fn ProtocolError::message(Self) -> String
+pub fn ProtocolError::to_string(Self) -> String
 pub impl Show for ProtocolError
 
 pub(all) suberror RuntimeError {
   RuntimeError(String)
 }
+pub fn RuntimeError::to_string(Self) -> String
 pub impl Show for RuntimeError
 
 // Types and methods
