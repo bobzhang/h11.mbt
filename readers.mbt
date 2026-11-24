@@ -159,7 +159,7 @@ fn obsolete_line_fold(
         out.push(buf.to_bytes())
       }
       let buf = @buffer.Buffer()
-      buf.write_bytes(line)
+      buf.write_bytesview(line)
       last = Some(buf)
     }
   }

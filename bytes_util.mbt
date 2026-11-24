@@ -106,7 +106,7 @@ fn bytes_lt(a : Bytes, b : Bytes) -> Bool {
 fn bytes_concat(parts : Array[Bytes]) -> Bytes {
   let buf = @buffer.Buffer()
   for p in parts {
-    buf.write_bytes(p)
+    buf.write_bytesview(p)
   }
   buf.to_bytes()
 }

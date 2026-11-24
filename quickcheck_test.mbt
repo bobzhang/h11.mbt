@@ -26,7 +26,7 @@ fn gen_bytes(
   lo : Int32,
   hi : Int32,
 ) -> @quickcheck.Generator[Bytes] {
-  @quickcheck.int_range(lo, hi + 1).flat_map(n => {
+  @quickcheck.int_range(inclusive=false, lo, hi + 1).flat_map(n => {
     @quickcheck.elements(alphabet)
     .array_with_size(n)
     .map(a => Bytes::from_array(a))
@@ -44,7 +44,9 @@ fn[T] gen_array(
   lo : Int32,
   hi : Int32,
 ) -> @quickcheck.Generator[Array[T]] {
-  @quickcheck.int_range(lo, hi + 1).flat_map(n => g.array_with_size(n))
+  @quickcheck.int_range(inclusive=false, lo, hi + 1).flat_map(n => {
+    g.array_with_size(n)
+  })
 }
 
 ///|
@@ -97,9 +99,9 @@ fn gen_header_value() -> @quickcheck.Generator[Bytes] {
       let buf = @buffer.Buffer()
       for i, w in words {
         if i > 0 {
-          buf.write_bytes(sep)
+          buf.write_bytesview(sep)
         }
-        buf.write_bytes(w)
+        buf.write_bytesview(w)
       }
       buf.to_bytes()
     })
@@ -280,7 +282,7 @@ fn gen_req_case() -> @quickcheck.Generator[ReqCase] {
     gen_array(gen_plain_header(), 0, 5),
     gen_array(gen_any_bytes(0, 30), 0, 4).zip(@quickcheck.spawn()),
     gen_array(gen_plain_header(), 0, 2).zip(
-      gen_array(@quickcheck.int_range(0, 100000), 0, 8),
+      gen_array(@quickcheck.int_range(inclusive=false, 0, 100000), 0, 8),
     ),
   ).map(t => {
     let ((meth, target), headers, (body, chunked), (trailers, splits)) = t
@@ -329,7 +331,7 @@ test "property: requests round trip through any fragmentation" {
         let wire = @buffer.Buffer()
         let sent = c.events()
         for e in sent {
-          wire.write_bytes(client.send(e).unwrap())
+          wire.write_bytesview(client.send(e).unwrap())
         }
         let expected_state : @h11.State = if c.meth == b"CONNECT" {
           MightSwitchProtocol
@@ -376,7 +378,7 @@ struct RespCase {
 ///|
 fn gen_resp_case() -> @quickcheck.Generator[RespCase] {
   gen_quad(
-    @quickcheck.int_range(200, 1000).zip(
+    @quickcheck.int_range(inclusive=false, 200, 1000).zip(
       gen_bytes(vchars + [b' ', b'\t'], 0, 12),
     ),
     gen_array(gen_plain_header(), 0, 5),
@@ -388,7 +390,7 @@ fn gen_resp_case() -> @quickcheck.Generator[RespCase] {
         (1, @quickcheck.pure(true)),
         (4, @quickcheck.pure(false)),
       ]),
-      gen_array(@quickcheck.int_range(0, 100000), 0, 8),
+      gen_array(@quickcheck.int_range(inclusive=false, 0, 100000), 0, 8),
     ),
   ).map(t => {
     let ((status_code, reason), headers, body, (use_cl, http10, head, splits)) = t
@@ -432,11 +434,13 @@ fn RespCase::run(self : RespCase) -> Unit raise {
     reason=self.reason,
   )
   let wire = @buffer.Buffer()
-  wire.write_bytes(server.send(Response(response)).unwrap())
+  wire.write_bytesview(server.send(Response(response)).unwrap())
   for b in body {
-    wire.write_bytes(server.send(Data(@h11.Data::new(b))).unwrap())
+    wire.write_bytesview(server.send(Data(@h11.Data::new(b))).unwrap())
   }
-  wire.write_bytes(server.send(EndOfMessage(@h11.EndOfMessage::new())).unwrap())
+  wire.write_bytesview(
+    server.send(EndOfMessage(@h11.EndOfMessage::new())).unwrap(),
+  )
   // HTTP/1.0 clients never get keep-alive.
   if self.client_http10 {
     assert_eq(server.our_state(), MustClose)
@@ -492,46 +496,46 @@ test "property: responses round trip for HTTP/1.0 and HTTP/1.1 peers" {
 /// close-delimited framing.
 fn gen_response_wire() -> @quickcheck.Generator[Bytes] {
   gen_quad(
-    @quickcheck.int_range(100, 1000).zip(
+    @quickcheck.int_range(inclusive=false, 100, 1000).zip(
       gen_bytes(vchars + [b' ', b'\t'], 0, 12),
     ),
     gen_array(gen_plain_header(), 0, 4),
     gen_array(gen_any_bytes(1, 20), 0, 3),
-    @quickcheck.int_range(0, 3),
+    @quickcheck.int_range(inclusive=false, 0, 3),
   ).map(t => {
     let ((status, reason), headers, chunks, framing) = t
     let buf = @buffer.Buffer()
-    buf.write_bytes(
+    buf.write_bytesview(
       b"HTTP/1.1 " + @utf8.encode(status.to_string()) + b" " + reason + b"\r\n",
     )
     for h in headers {
-      buf.write_bytes(h.0 + b": " + h.1 + b"\r\n")
+      buf.write_bytesview(h.0 + b": " + h.1 + b"\r\n")
     }
     let body = chunks.fold(init=b"", (acc, b) => acc + b)
     match framing {
       0 => {
-        buf.write_bytes(
+        buf.write_bytesview(
           b"Content-Length: " +
           @utf8.encode(body.length().to_string()) +
           b"\r\n\r\n",
         )
-        buf.write_bytes(body)
+        buf.write_bytesview(body)
       }
       1 => {
-        buf.write_bytes(b"Transfer-Encoding: chunked\r\n\r\n")
+        buf.write_bytesview(b"Transfer-Encoding: chunked\r\n\r\n")
         for c in chunks {
-          buf.write_bytes(
+          buf.write_bytesview(
             @utf8.encode(c.length().to_string(radix=16)) +
             b";ext\r\n" +
             c +
             b"\r\n",
           )
         }
-        buf.write_bytes(b"0\r\n\r\n")
+        buf.write_bytesview(b"0\r\n\r\n")
       }
       _ => {
-        buf.write_bytes(b"\r\n")
-        buf.write_bytes(body)
+        buf.write_bytesview(b"\r\n")
+        buf.write_bytesview(body)
       }
     }
     buf.to_bytes()
@@ -556,7 +560,7 @@ fn gen_wire_input(role : @h11.Role) -> @quickcheck.Generator[Bytes] {
         let client = @h11.Connection::new(Client)
         let wire = @buffer.Buffer()
         for e in (try! c.events()) {
-          wire.write_bytes(try! client.send(e).unwrap())
+          wire.write_bytesview(try! client.send(e).unwrap())
         }
         wire.to_bytes()
       })
@@ -565,7 +569,9 @@ fn gen_wire_input(role : @h11.Role) -> @quickcheck.Generator[Bytes] {
   let mutated = valid
     .zip(
       gen_array(
-        @quickcheck.int_range(0, 1 << 20).zip(gen_any_bytes(0, 3)),
+        @quickcheck.int_range(inclusive=false, 0, 1 << 20).zip(
+          gen_any_bytes(0, 3),
+        ),
         1,
         4,
       ),
@@ -599,7 +605,9 @@ test "property: fragmentation never changes the outcome" {
     @qc.forall(
       @quickcheck.elements([@h11.Role::Client, Server]).flat_map(role => {
         gen_wire_input(role)
-        .zip(gen_array(@quickcheck.int_range(0, 100000), 0, 10))
+        .zip(
+          gen_array(@quickcheck.int_range(inclusive=false, 0, 100000), 0, 10),
+        )
         .map(t => (role, t.0, t.1))
       }),
       (t : (@h11.Role, Bytes, Array[Int32])) => {
@@ -623,8 +631,8 @@ fn gen_framing_headers() -> @quickcheck.Generator[
   (Int32, Array[(Bytes, Bytes)], Bool),
 ] {
   gen_quad(
-    @quickcheck.int_range(0, 50),
-    gen_array(@quickcheck.int_range(0, 3), 1, 4),
+    @quickcheck.int_range(inclusive=false, 0, 50),
+    gen_array(@quickcheck.int_range(inclusive=false, 0, 3), 1, 4),
     @quickcheck.elements([
       None,
       Some(b"chunked"),
@@ -761,14 +769,14 @@ test "property: chunked bodies keep exact chunk boundaries under any fragmentati
   @qc.quick_check(
     @qc.forall(
       gen_array(gen_any_bytes(0, 40), 0, 8).zip(
-        gen_array(@quickcheck.int_range(0, 100000), 0, 8),
+        gen_array(@quickcheck.int_range(inclusive=false, 0, 100000), 0, 8),
       ),
       (t : (Array[Bytes], Array[Int32])) => {
         let (chunks, splits) = t
         check(() => {
           let client = @h11.Connection::new(Client)
           let wire = @buffer.Buffer()
-          wire.write_bytes(
+          wire.write_bytesview(
             client
             .send(
               Request(
@@ -781,9 +789,9 @@ test "property: chunked bodies keep exact chunk boundaries under any fragmentati
             .unwrap(),
           )
           for c in chunks {
-            wire.write_bytes(client.send(Data(@h11.Data::new(c))).unwrap())
+            wire.write_bytesview(client.send(Data(@h11.Data::new(c))).unwrap())
           }
-          wire.write_bytes(
+          wire.write_bytesview(
             client.send(EndOfMessage(@h11.EndOfMessage::new())).unwrap(),
           )
           let pieces = fragment(wire.to_bytes(), splits)
@@ -799,7 +807,7 @@ test "property: chunked bodies keep exact chunk boundaries under any fragmentati
               current = Some(@buffer.Buffer())
             }
             guard current is Some(buf) else { fail("data outside a chunk") }
-            buf.write_bytes(d.data)
+            buf.write_bytesview(d.data)
             if d.chunk_end {
               got.push(buf.to_bytes())
               current = None
