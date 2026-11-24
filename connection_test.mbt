@@ -756,7 +756,7 @@ test "sendfile" {
   assert_true(data.iter().any(d => physical_equal(d, placeholder)))
   let joined = @buffer.Buffer()
   for d in data {
-    joined.write_bytes(d)
+    joined.write_bytesview(d)
   }
   assert_eq(joined.to_bytes(), b"a\r\nxxxxxxxxxx\r\n")
   let (c, data) = setup_sendfile(None, b"1.0", placeholder)

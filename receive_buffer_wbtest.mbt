@@ -125,7 +125,7 @@ test "receivebuffer large incremental growth stays consistent" {
   for i in 0..<1000 {
     let chunk = Bytes::make(i % 37 + 1, (i % 251).to_byte())
     b.append(chunk)
-    expected.write_bytes(chunk)
+    expected.write_bytesview(chunk)
     if i % 3 == 0 {
       let n = (i % 50 + 1).to_int64()
       ignore(b.maybe_extract_at_most(n))

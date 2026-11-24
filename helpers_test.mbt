@@ -76,7 +76,7 @@ fn ConnectionPair::send(
   for send_event in send_events {
     match self.conn(role).send(send_event) {
       None => closed = true
-      Some(new_data) => data.write_bytes(new_data)
+      Some(new_data) => data.write_bytesview(new_data)
     }
   }
   let data = data.to_bytes()

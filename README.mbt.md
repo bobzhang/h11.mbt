@@ -143,9 +143,9 @@ fn serve(chunks : Array[Bytes]) -> Bytes raise {
         let resp = @h11.Response::new(status_code=200, headers=[
           (b"Content-Length", length),
         ])
-        out.write_bytes(conn.send(Response(resp)).unwrap())
-        out.write_bytes(conn.send(Data(@h11.Data::new(body))).unwrap())
-        out.write_bytes(
+        out.write_bytesview(conn.send(Response(resp)).unwrap())
+        out.write_bytesview(conn.send(Data(@h11.Data::new(body))).unwrap())
+        out.write_bytesview(
           conn.send(EndOfMessage(@h11.EndOfMessage::new())).unwrap(),
         )
       }
